@@ -320,7 +320,7 @@ public class ClusterComparatorOptions {
         if (cl.hasOption("usage")) {
             usage(options);
         }
-        this.silent = Boolean.valueOf(cl.getOptionValue("quiet", "false"));
+        this.silent = cl.hasOption("quiet");
         this.threads = Integer.valueOf(cl.getOptionValue("threads", "1"));
         this.startPartition = Integer.valueOf(cl.getOptionValue("startPartition", "0"));
         this.endPartition = Integer.valueOf(cl.getOptionValue("endPartition", "4096"));
@@ -345,7 +345,7 @@ public class ClusterComparatorOptions {
         this.authMode2 = AuthMode.valueOf(cl.getOptionValue("authMode2", "INTERNAL").toUpperCase());
         this.clusterName1 = cl.getOptionValue("clusterName1");
         this.clusterName2 = cl.getOptionValue("clusterName2");
-        this.console = Boolean.valueOf(cl.getOptionValue("console", "false"));
+        this.console = cl.hasOption("console");
         this.missingRecordsLimit = Long.valueOf(cl.getOptionValue("limit", "0"));
         this.compareMode = CompareMode.valueOf(cl.getOptionValue("compareMode", CompareMode.MISSING_RECORDS.toString()).toUpperCase());
         if (cl.hasOption("dateFormat")) {

@@ -166,3 +166,11 @@ while ((side1Valid || side2Valid)) {
 Scanning a single partition requires only a single server-side thread -- there is no parallelization across a partition by multiple query threads. It would be possible for the client to perform a scan of all 4,096 server partitions concurrently which would utilize more server-side query threads but this would make the client more complex as all concurrent scans will be interleaved in the client result set. 
 
 Hence, concurrency is controlled by the client. Each thread will scan one partition before moving onto the next partition. There can be multiple concurrent client threads scanning different partitions, each of which will consume one server-side scan thread for each of the clusters.
+
+### Examples
+
+```
+-h1 172.17.0.2 -h2 172.17.0.3 -n test -s cars -a scan -f /tmp/output.csv -c -C RECORD_DIFFERENCES -t 0
+```
+
+Compare the `cars` set in the `test` namespace, using one thread per client-side core. Differences are output to `/tmp/output.csv`
