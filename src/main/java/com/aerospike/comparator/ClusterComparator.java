@@ -38,6 +38,13 @@ import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 
 public class ClusterComparator {
 
+    // TODO:
+    // - config file to remove certain bins from comparison of sets
+    // - Protobuf'ing binary fields
+    // - Or msgpack
+    // - Compare metadata -- sindex, set indexes, etc. Schwab should send information.
+    // - Ability to compare different sets (schwab comparator) Note: how to ensure it's not just a one-way comparison?
+    // - TLS Support (Yahoo
     private final int startPartition;
     private final int endPartition;
     private final AtomicLong recordsCluster1Processed = new AtomicLong();
@@ -46,6 +53,7 @@ public class ClusterComparator {
     private final AtomicLong missingRecordsCluster2 = new AtomicLong();
     private final AtomicLong recordsDifferentCount = new AtomicLong();
     private final AtomicLong totalMissingRecords = new AtomicLong();
+    private final AtomicLong totalRecordsCompared = new AtomicLong();
     
     private ExecutorService executor = null;
     private AtomicInteger activeThreads;
@@ -167,7 +175,19 @@ public class ClusterComparator {
         return partitionList;
     }
     
-    private int compare(byte[] digest1, byte[] digest2) {
+    private int compare(Key key1, Key key2) {
+        if (key1 == null && key2 == null) {
+            // This should never happen
+            return 0;
+        }
+        else if (key1 == null) {
+            return -1;
+        }
+        else if (key2 == null) {
+            return 1;
+        }
+        byte[] digest1 = key1.digest;
+        byte[] digest2 = key2.digest;
         if (digest1.length != digest2.length) {
             throw new IllegalArgumentException("Digest1 has a length of " + digest1.length + ", digest2 has a length of " + digest2.length);
         }
@@ -281,42 +301,37 @@ public class ClusterComparator {
 
                 Key key1 = side1Valid ? recordSet1.getKey() : null;
                 Key key2 = side2Valid ? recordSet2.getKey() : null;
-                if (key1 == null) {
+                int result = compare(key1, key2);
+                if (result < 0) {
+                    // The digests go down as we go through the partition, so if side 2 is > side 1
+                    // it means that side 1 has missed this one and we need to advance side2
                     missingRecord(client2, partitionId, key2, true);
                     side2Valid = getNextRecord(recordSet2, 2);
                 }
-                else if (key2 == null) {
-                    missingRecord(client1, partitionId,key1, false);
+                else if (result > 0) {
+                    // The digests go down as we go through the partition, so if side 1 is > side 2
+                    // it means that side 2 has missed this one and we need to advance side1
+                    missingRecord(client1, partitionId, key1, false);
                     side1Valid = getNextRecord(recordSet1, 1);
                 }
                 else {
-                    int result = compare(key1.digest, key2.digest);
-                    if (result < 0) {
-                        // The digests go down as we go through the partition, so if side 2 is > side 1
-                        // it means that side 1 has missed this one and we need to advance side2
-                        missingRecord(client2, partitionId, key2, true);
-                        side2Valid = getNextRecord(recordSet2, 2);
-                    }
-                    else if (result > 0) {
-                        // The digests go down as we go through the partition, so if side 1 is > side 2
-                        // it means that side 2 has missed this one and we need to advance side1
-                        missingRecord(client1, partitionId, key1, false);
-                        side1Valid = getNextRecord(recordSet1, 1);
-                    }
-                    else {
-                        if (options.isRecordLevelCompare()) {
-                            Record record1 = recordSet1.getRecord();
-                            Record record2 = recordSet2.getRecord();
-                            DifferenceSet compareResult = comparator.compare(record1, record2, 
-                                    options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
-                            if (compareResult.areDifferent()) {
-                                differentRecords(partitionId, key2, null, null, compareResult);
-                            }
+                    if (options.isRecordLevelCompare()) {
+                        Record record1 = recordSet1.getRecord();
+                        Record record2 = recordSet2.getRecord();
+                        DifferenceSet compareResult = comparator.compare(key1, record1, record2,
+                                // TODO: Add in options for the paths of case incompare
+                                options.getPathOptions(),
+                                options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
+                        if (compareResult.areDifferent()) {
+                            differentRecords(partitionId, key2, null, null, compareResult);
                         }
-                        // The keys are equal, move on.
-                        side2Valid = getNextRecord(recordSet2, 2);
-                        side1Valid = getNextRecord(recordSet1, 1);
+                        if (options.getRecordCompareLimit() > 0 && totalRecordsCompared.incrementAndGet() >= options.getRecordCompareLimit()) {
+                            forceTerminate = true;
+                        }
                     }
+                    // The keys are equal, move on.
+                    side2Valid = getNextRecord(recordSet2, 2);
+                    side1Valid = getNextRecord(recordSet1, 1);
                 }
             }
         }
@@ -443,15 +458,22 @@ public class ClusterComparator {
         
         if (!options.isSilent()) {
             if (options.isRecordLevelCompare()) {
-                System.out.printf("Finished: %d missing records on side 1, %d missing records on side 2, %d records different.\n", 
-                        this.missingRecordsCluster1.get(), this.missingRecordsCluster2.get(), this.recordsDifferentCount.get());
+                System.out.printf("Finished: %d missing records on side 1, %d missing records on side 2, %d records different, %,d records compared.\n", 
+                        this.missingRecordsCluster1.get(), this.missingRecordsCluster2.get(), this.recordsDifferentCount.get(), this.totalRecordsCompared.get());
             }
             else {
-                System.out.printf("Finished: %d missing records on side 1, %d missing records on side 2.\n", this.missingRecordsCluster1.get(), this.missingRecordsCluster2.get());
+                System.out.printf("Finished: %,d missing records on side 1, %,d missing records on side 2.\n", 
+                        this.missingRecordsCluster1.get(), this.missingRecordsCluster2.get());
             }
             if (this.forceTerminate) {
-                System.out.printf("Comparison terminated after finding %d missing records on a limit of %d\n", 
-                        this.missingRecordsCluster1.get()+this.missingRecordsCluster2.get(), this.options.getMissingRecordsLimit());
+                if (this.totalMissingRecords.get() >= this.options.getMissingRecordsLimit()) {
+                    System.out.printf("Comparison terminated after finding %d missing records on a limit of %d\n", 
+                            this.totalMissingRecords.get(), this.options.getMissingRecordsLimit());
+                }
+                else if (this.totalRecordsCompared.get() >= this.options.getRecordCompareLimit()) {
+                    System.out.printf("Comparison terminated after comparing %d records on a limit of %d\n", 
+                            this.totalRecordsCompared.get(), this.options.getRecordCompareLimit());
+                }
             }
         }
     }
@@ -520,9 +542,10 @@ public class ClusterComparator {
                 String[] linePart = line.split(",");
                 String namespace = linePart[0];
                 String setName = linePart[1];
-                String digest1 = linePart[2];
-                String digest2 = linePart.length >= 4 ? linePart[3] : null;
-                if (digest1 != null && !digest1.trim().isEmpty()) {
+                String userKey = linePart[2];
+                String digest1 = linePart[3];
+                String digest2 = linePart.length >= 5 ? linePart[4] : null;
+                if (digest1 != null && !digest1.trim().isEmpty() && !"null".equals(digest1)) {
                     if (read) {
                         this.readRecord(writePolicy1, client1, namespace, setName, digest1);
                     }
@@ -545,7 +568,7 @@ public class ClusterComparator {
         
     }
     
-    public void begin() throws Exception {
+    public DifferenceSummary begin() throws Exception {
         if (!options.isSilent()) {
             System.out.printf("Beginning scan with namespaces '%s', sets '%s', start partition: %d, end partition %d\n", 
                     String.join(",", this.options.getNamespaces()),
@@ -566,7 +589,7 @@ public class ClusterComparator {
             }
             else {
                 this.beginComparisons(client1, client2);
-                if (options.getAction() == Action.SCAN_ASK && totalMissingRecords.get() > 0) {
+                if (options.getAction() == Action.SCAN_ASK && (totalMissingRecords.get() > 0 || recordsDifferentCount.get() > 0)) {
                     System.out.printf("%,d differences found between the 2 clusters. Do you want those records to be touched, read or none? (t/r//N)", totalMissingRecords.get());
                     boolean touch = false;
                     boolean read = false;
@@ -596,6 +619,7 @@ public class ClusterComparator {
             client2.close();
             input.close();
         }
+        return new DifferenceSummary(missingRecordsCluster1.get(), missingRecordsCluster2.get(), recordsDifferentCount.get());
     }
     
     public static void main(String[] args) throws Exception {

@@ -1,0 +1,7 @@
+---
+paths:
+- path: /test/testSet/unordered1
+  action: compareUnordered
+- path: /**/ignore
+  action: ignore
+  

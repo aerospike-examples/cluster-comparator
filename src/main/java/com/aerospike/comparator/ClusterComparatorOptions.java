@@ -1,5 +1,6 @@
 package com.aerospike.comparator;
 
+import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
@@ -14,6 +15,10 @@ import org.apache.commons.cli.Options;
 import com.aerospike.client.policy.AuthMode;
 import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.util.Util;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 
 public class ClusterComparatorOptions {
     private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-hh:mm:ssZ";
@@ -60,6 +65,8 @@ public class ClusterComparatorOptions {
     private Date beginDate = null;
     private Date endDate = null;
     private SimpleDateFormat dateFormat = new SimpleDateFormat(DEFAULT_DATE_FORMAT);
+    private PathOptions pathOptions = null; 
+    private long recordCompareLimit;
     
     private static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -248,6 +255,9 @@ public class ClusterComparatorOptions {
                 + "by default "+DEFAULT_DATE_FORMAT+" but can be changed with -df flag. If the parameter is a just a number this will be treated as the epoch since 1/1/1970. If the start date "
                 + "is also specified, only records falling between the 2 dates will be scanned. Default: scan until the end of time.");
         options.addOption("df", "dateFormat", true, "Format used to convert the dates passed with the -db and -de flags. Should conform to the spec of SimpleDateFormat.");
+        options.addOption("pf", "pathOptionsFile", true, "YAML file used to contain path options. The options are used to determine whether to ignore paths or "
+                + "compare list paths order insensitive.");
+        options.addOption("rl", "recordLimit", true, "The maximum number of records to compare. Specify 0 for unlimited records (default)");
         
         return options;
     }
@@ -369,6 +379,13 @@ public class ClusterComparatorOptions {
                 this.beginDate = sdf.parse(value);
             }
         }
+        String pathOptionsFile = cl.getOptionValue("pathOptionsFile");
+        if (pathOptionsFile != null) {
+            ObjectMapper mapper = YAMLMapper.builder().enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS).build();
+            mapper.findAndRegisterModules();
+            this.pathOptions = mapper.readValue(new File (pathOptionsFile), PathOptions.class);
+        }
+        this.recordCompareLimit = Long.valueOf(cl.getOptionValue("recordLimit", "0"));
         this.validate(options);
     }
 
@@ -485,6 +502,18 @@ public class ClusterComparatorOptions {
     
     public SimpleDateFormat getDateFormat() {
         return dateFormat;
+    }
+    
+    public PathOptions getPathOptions() {
+        return pathOptions;
+    }
+    
+    public void setPathOptions(PathOptions pathOptions) {
+        this.pathOptions = pathOptions;
+    }
+    
+    public long getRecordCompareLimit() {
+        return recordCompareLimit;
     }
 }
 

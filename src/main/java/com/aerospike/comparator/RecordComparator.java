@@ -1,12 +1,14 @@
 package com.aerospike.comparator;
 
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 
 public class RecordComparator {
@@ -61,20 +63,106 @@ public class RecordComparator {
         }
     }
 
-    private void compare(List<?> list1, List<?> list2, DifferenceSet differences) {
-        int max = Math.max(list1.size(), list2.size());
-        for (int i = 0; i < max; i++) {
-            Object o1 = (i < list1.size()) ? list1.get(i) : null;
-            Object o2 = (i < list2.size()) ? list2.get(i) : null;
-            compare(o1, o2, Integer.toString(i), differences);
-            if (differences.isQuickCompare() && differences.areDifferent()) {
-                return;
+    private long getHashCode(Object obj, DifferenceSet differences) {
+        long hash = 29L;
+        if (obj == null) {
+            return 0;
+        }
+        if (obj instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>)obj;
+            for (Object key: map.keySet()) {
+                differences.pushPath(key.toString());
+                long keyHash = getHashCode(key, differences);
+                long objHash = getHashCode(map.get(key), differences);
+                hash = hash * 23 + 31 * keyHash + 17 * objHash + 1;
+                differences.popPath();
             }
         }
-
+        else if (obj instanceof List) {
+            boolean unorderedCompare = differences.shouldIgnoreCurrentPath();
+            List<?> list = (List)obj;
+            for (int i = 0; i < list.size(); i++) {
+                differences.pushPath(Integer.toString(i));
+                long itemHash = getHashCode(list.get(i), differences);
+                if (!unorderedCompare) {
+                    itemHash += 13*i;
+                }
+                hash = hash * 7 + 19 * itemHash + 3;
+                differences.popPath();
+            }
+        }
+        else if (obj.getClass().isArray()) {
+            Object[] objs = (Object[])obj;
+            for (Object thisObj : objs) {
+                hash = hash * 11 + 3 * getHashCode(thisObj, differences);
+            }
+        }
+        else {
+            hash = hash * 3 + 7 * obj.hashCode();
+        }
+        return hash;
+    }
+    private void compare(List<?> list1, List<?> list2, DifferenceSet differences) {
+        EnumSet<PathAction> pathOptions = differences.getOptionsForCurrentPath();
+        if (pathOptions != null && pathOptions.contains(PathAction.IGNORE)) {
+            return;
+        }
+        if (pathOptions != null && pathOptions.contains(PathAction.COMPAREUNORDERED)) {
+            if (list1.size() != list2.size()) {
+                differences.addDifference("", DifferenceType.CONTENTS, list1, list2);
+            }
+            else {
+                HashMap<Long, Integer> values = new HashMap<>();
+                for (int i = 0; i < list1.size(); i++) {
+                    long hash = getHashCode(list1.get(i), differences);
+                    Integer count = values.get(hash);
+                    if (count == null) {
+                        values.put(hash, 1);
+                    }
+                    else {
+                        values.put(hash, count+1);
+                    }
+                }
+                boolean checkSize = true;
+                for (int i = 0; i < list2.size(); i++) {
+                    long hash = getHashCode(list2.get(i), differences);
+                    Integer count = values.get(hash);
+                    if (count == null || count == 0) {
+                        differences.addDifference("", DifferenceType.CONTENTS, list1, list2);
+                        checkSize = false;
+                        break;
+                    }
+                    else if (count <= 1) {
+                        values.remove(hash);
+                    }
+                    else {
+                        values.put(hash, count - 1);
+                    }
+                }
+                if (checkSize && !values.isEmpty()) {
+                    // There are values missing
+                    differences.addDifference("", DifferenceType.CONTENTS, list1, list2);
+                }
+            }
+        }
+        else {
+            int max = Math.max(list1.size(), list2.size());
+            for (int i = 0; i < max; i++) {
+                Object o1 = (i < list1.size()) ? list1.get(i) : null;
+                Object o2 = (i < list2.size()) ? list2.get(i) : null;
+                compare(o1, o2, Integer.toString(i), differences);
+                if (differences.isQuickCompare() && differences.areDifferent()) {
+                    return;
+                }
+            }
+        }
     }
 
     private void compare(Map<?, ?> side1, Map<?, ?> side2, DifferenceSet differences) {
+        if (differences.shouldIgnoreCurrentPath()) {
+            return;
+        }
+
         Set<Object> keys = new HashSet<>();
         for (Object key : side1.keySet()) {
             keys.add(key);
@@ -93,12 +181,16 @@ public class RecordComparator {
         }
     }
 
-    public DifferenceSet compare(Record record1, Record record2, boolean stopAtFirstDifference) {
+    public DifferenceSet compare(Key key, Record record1, Record record2, PathOptions pathOptions, boolean stopAtFirstDifference) {
         Map<?, ?> map1 = (Map<?, ?>)record1.bins;
         Map<?, ?> map2 = record2.bins;
 
-        DifferenceSet result = new DifferenceSet(stopAtFirstDifference);
+        DifferenceSet result = new DifferenceSet(key, stopAtFirstDifference, pathOptions);
+        result.pushPath(key.namespace);
+        result.pushPath(key.setName);
         compare(map1, map2, result);
+        result.popPath();
+        result.popPath();
         return result;
     }
 
@@ -133,7 +225,9 @@ public class RecordComparator {
         Record r1 = new Record(map1, 0, 0);
         Record r2 = new Record(map2, 0, 0);
         
-        DifferenceSet diffs = new RecordComparator().compare(r1, r2, false);
+        PathOptions options = new PathOptions();
+        options.setPaths(Arrays.asList(new PathOption("/unordered", PathAction.COMPAREUNORDERED)));
+        DifferenceSet diffs = new RecordComparator().compare(null, r1, r2, options, false);
         System.out.println(diffs.toString());
         
     }
