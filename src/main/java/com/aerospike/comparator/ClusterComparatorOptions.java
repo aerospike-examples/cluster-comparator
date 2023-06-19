@@ -67,6 +67,7 @@ public class ClusterComparatorOptions {
     private SimpleDateFormat dateFormat = new SimpleDateFormat(DEFAULT_DATE_FORMAT);
     private PathOptions pathOptions = null; 
     private long recordCompareLimit;
+    private boolean metadataCompare = false;
     
     private static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -258,6 +259,7 @@ public class ClusterComparatorOptions {
         options.addOption("pf", "pathOptionsFile", true, "YAML file used to contain path options. The options are used to determine whether to ignore paths or "
                 + "compare list paths order insensitive.");
         options.addOption("rl", "recordLimit", true, "The maximum number of records to compare. Specify 0 for unlimited records (default)");
+        options.addOption("m", "metadataCompare", false, "Perform a meta-data comparison between the 2 clusters");
         
         return options;
     }
@@ -386,6 +388,9 @@ public class ClusterComparatorOptions {
             this.pathOptions = mapper.readValue(new File (pathOptionsFile), PathOptions.class);
         }
         this.recordCompareLimit = Long.valueOf(cl.getOptionValue("recordLimit", "0"));
+        if (cl.hasOption("metadataCompare")) {
+            this.metadataCompare = true;
+        }
         this.validate(options);
     }
 
@@ -514,6 +519,10 @@ public class ClusterComparatorOptions {
     
     public long getRecordCompareLimit() {
         return recordCompareLimit;
+    }
+    
+    public boolean isMetadataCompare() {
+        return metadataCompare;
     }
 }
 

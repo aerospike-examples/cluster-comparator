@@ -42,9 +42,9 @@ public class ClusterComparator {
     // - config file to remove certain bins from comparison of sets
     // - Protobuf'ing binary fields
     // - Or msgpack
-    // - Compare metadata -- sindex, set indexes, etc. Schwab should send information.
-    // - Ability to compare different sets (schwab comparator) Note: how to ensure it's not just a one-way comparison?
-    // - TLS Support (Yahoo
+    // - Compare metadata -- sindex, set indexes, etc.
+    // - Ability to compare different sets (scan/batch comparator) Note: how to ensure it's not just a one-way comparison?
+    // - TLS Support
     private final int startPartition;
     private final int endPartition;
     private final AtomicLong recordsCluster1Processed = new AtomicLong();
@@ -414,6 +414,10 @@ public class ClusterComparator {
         this.threadsToUse = options.getThreads() <= 0 ? Runtime.getRuntime().availableProcessors() : options.getThreads();
         this.filterExpresion = formFilterExpression();
 
+        if (options.isMetadataCompare()) {
+            MetadataComparator metadataComparator = new MetadataComparator(options);
+            DifferenceSet result = metadataComparator.compareMetaData(client1, client2);
+        }
         for (String namespace : options.getNamespaces()) {
             String[] sets = options.getSetNames();
             if (sets == null || sets.length == 0) {
@@ -579,7 +583,7 @@ public class ClusterComparator {
         }
         IAerospikeClient client1 = this.connectClient(true);
         IAerospikeClient client2 = this.connectClient(false);
-        Scanner input = new Scanner(System.in);
+        Scanner input = null;
         try {
             if (options.getAction() == Action.TOUCH) {
                 this.processRecords(client1, client2, true, false);
@@ -591,6 +595,7 @@ public class ClusterComparator {
                 this.beginComparisons(client1, client2);
                 if (options.getAction() == Action.SCAN_ASK && (totalMissingRecords.get() > 0 || recordsDifferentCount.get() > 0)) {
                     System.out.printf("%,d differences found between the 2 clusters. Do you want those records to be touched, read or none? (t/r//N)", totalMissingRecords.get());
+                    input = new Scanner(System.in);
                     boolean touch = false;
                     boolean read = false;
                     while (true) {
@@ -617,7 +622,9 @@ public class ClusterComparator {
         finally {
             client1.close();
             client2.close();
-            input.close();
+            if (input != null) {
+                input.close();
+            }
         }
         return new DifferenceSummary(missingRecordsCluster1.get(), missingRecordsCluster2.get(), recordsDifferentCount.get());
     }

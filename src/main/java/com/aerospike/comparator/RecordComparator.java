@@ -158,7 +158,7 @@ public class RecordComparator {
         }
     }
 
-    private void compare(Map<?, ?> side1, Map<?, ?> side2, DifferenceSet differences) {
+    public void compare(Map<?, ?> side1, Map<?, ?> side2, DifferenceSet differences) {
         if (differences.shouldIgnoreCurrentPath()) {
             return;
         }

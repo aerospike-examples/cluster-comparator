@@ -43,12 +43,24 @@ public class DifferenceSet {
         return false;
     }
     
-    protected void pushPath(String pathPart) {
+    protected void pushPath(String pathPart, String ...otherParts) {
         this.pathParts.addFirst(pathPart);
+        for (String thisPart : otherParts) {
+            this.pathParts.addFirst(thisPart);
+        }
     }
 
     protected String popPath() {
         return this.pathParts.removeFirst();
+    }
+
+    protected void popPath(int count) {
+        if (count < 1) {
+            throw new IllegalArgumentException("count must be >= 1");
+        }
+        for (int i = 0; i < count; i++) {
+            this.pathParts.removeFirst();
+        }
     }
 
     protected String getCurrentPath() {
