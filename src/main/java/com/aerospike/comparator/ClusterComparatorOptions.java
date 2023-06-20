@@ -1,10 +1,18 @@
 package com.aerospike.comparator;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.X509ExtendedKeyManager;
+import javax.net.ssl.X509ExtendedTrustManager;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -12,13 +20,16 @@ import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 
+import com.aerospike.client.AerospikeException;
 import com.aerospike.client.policy.AuthMode;
 import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.util.Util;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
+
+import nl.altindag.ssl.SSLFactory;
+import nl.altindag.ssl.pem.util.PemUtils;
 
 public class ClusterComparatorOptions {
     private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-hh:mm:ssZ";
@@ -67,6 +78,7 @@ public class ClusterComparatorOptions {
     private SimpleDateFormat dateFormat = new SimpleDateFormat(DEFAULT_DATE_FORMAT);
     private PathOptions pathOptions = null; 
     private long recordCompareLimit;
+    private String tlsHost = null;
     private boolean metadataCompare = false;
     
     private static class ParseException extends RuntimeException {
@@ -111,8 +123,14 @@ public class ClusterComparatorOptions {
         }
         
         public boolean isSymbol(char ch) {
+            return isSymbol(ch, true);
+        }
+        
+        public boolean isSymbol(char ch, boolean consumeSymbol) {
             if (skipWhitespace() && data.charAt(offset) == ch) {
-                offset++;
+                if (consumeSymbol) {
+                    offset++;
+                }
                 return true;
             }
             return false;
@@ -132,6 +150,27 @@ public class ClusterComparatorOptions {
                         return result;
                     }
                 }
+                else if (data.charAt(offset)=='{') {
+                    int start = offset;
+                    // Nested object, scan to the end of the nesting
+                    int endBraceCount = 1;
+                    offset++;
+                    while (endBraceCount > 0 && offset < data.length()) {
+                        if (data.charAt(offset) == '{') {
+                            endBraceCount++;
+                        }
+                        else if (data.charAt(offset) == '}') {
+                            endBraceCount--;
+                        }
+                        offset++;
+                    }
+                    if (endBraceCount == 0) {
+                        return data.substring(start, offset);
+                    }
+                    else {
+                        throw new ParseException(String.format("Error whilst parsing string: '%s': received '{' to start object but didn't having a matching closing '}'"));
+                    }
+                }
                 else {
                     int start = offset;
                     while (offset < data.length() && Character.isJavaIdentifierPart(data.charAt(offset))) {
@@ -141,6 +180,91 @@ public class ClusterComparatorOptions {
                 }
             }
             return null;
+        }
+        
+        @Override
+        public String toString() {
+            return String.format("(offset:%d,current:%s)[%s]", offset, offset < data.length()? data.substring(offset, offset+1) : "EOS" , data);
+        }
+    }
+    
+    private SSLContext parseTlsContext(String tlsContext) {
+        String certChain = null;
+        String privateKey = null;
+        String caCertChain = null;
+        String keyPassword = null;
+        
+        StringWithOffset stringData = new StringWithOffset(tlsContext);
+        stringData.checkAndConsumeSymbol('{');
+        while (!stringData.isSymbol('}', false)) {
+            String subkey = stringData.getString();
+            stringData.checkAndConsumeSymbol(':');
+            String subValue = stringData.getString();
+            if (!stringData.isSymbol('}', false)) {
+                stringData.checkAndConsumeSymbol(',');
+            }
+            switch (subkey) {
+            case "certChain":
+                certChain = subValue;
+                break;
+            case "privateKey":
+                privateKey = subValue;
+                break;
+            case "caCertChain":
+                caCertChain = subValue;
+                break;
+            case "keyPassword":
+                keyPassword = subValue;
+                break;
+            default: 
+                throw new ParseException("Unexpected key '" + subkey + "' in TLS Context. Valid keys are: 'certChain', 'privateKey', 'caCertChain', and 'keyPassword'");
+            }
+        }
+        
+        InputStream certFile = null;
+        InputStream keyFile = null;
+        InputStream caFile = null;
+        try {
+            try {
+                certFile = new FileInputStream(new File(certChain));
+            } catch (FileNotFoundException e) {
+                throw new AerospikeException(String.format("certChain file '%s' not found", certChain));
+            }
+            try {
+                keyFile = new FileInputStream(new File(privateKey));
+            } catch (FileNotFoundException e) {
+                throw new AerospikeException(String.format("privateKey file '%s' not found", certChain));
+            }
+            try {
+                caFile = new FileInputStream(new File(caCertChain));
+            } catch (FileNotFoundException e) {
+                throw new AerospikeException(String.format("caCertChain file '%s' not found", certChain));
+            }
+            X509ExtendedKeyManager keyManager = PemUtils.loadIdentityMaterial(certFile, keyFile, keyPassword == null ? null : keyPassword.toCharArray());
+            X509ExtendedTrustManager trustManager = PemUtils.loadTrustMaterial(caFile);
+    
+            SSLFactory sslFactory = SSLFactory.builder()
+                    .withIdentityMaterial(keyManager)
+                    .withTrustMaterial(trustManager)
+                    .build();
+            return sslFactory.getSslContext();
+        }
+        finally {
+            if (certFile != null) {
+                try {
+                    certFile.close();
+                } catch (IOException ignored) {}
+            }
+            if (keyFile != null) {
+                try {
+                    keyFile.close();
+                } catch (IOException ignored) {}
+            }
+            if (caFile != null) {
+                try {
+                    caFile.close();
+                } catch (IOException ignored) {}
+            }
         }
     }
     
@@ -158,8 +282,11 @@ public class ClusterComparatorOptions {
         case "loginOnly":
             tlsPolicy.forLoginOnly = Boolean.parseBoolean(value);
             break;
+        case "context":
+            tlsPolicy.context = parseTlsContext(value);
+            break;
         default: 
-            throw new ParseException("Unexpected key '" + key + "' in TLS policy. Valid keys are: 'protocols', 'ciphers', 'revokeCerts' and 'loginOnly'");
+            throw new ParseException("Unexpected key '" + key + "' in TLS policy. Valid keys are: 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'");
         }
     }
     
@@ -241,10 +368,16 @@ public class ClusterComparatorOptions {
         options.addOption("U2", "user2", true, "User name for cluster 2");
         options.addOption("P2", "password2", true, "Password for cluster 2");
         options.addOption("r", "rps", true, "Limit requests per second on the cluster to this value. Use 0 for unlimited. (Default: 0)");
-        options.addOption("t1", "tls1", true, "Set the TLS Policy options on cluster 1. The value passed should be a JSON string. Valid keys in this"
-                + "string inlcude 'protocols', 'ciphers', 'revokeCerts' and 'loginOnly'");
+        options.addOption("t1", "tls1", true, "Set the TLS Policy options on cluster 1. The value passed should be a JSON string. Valid keys in this "
+                + "string inlcude 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value should be a JSON string which "
+                + "can contain keys 'certChain' (path to the certificate chain PEM), 'privateKey' (path to the certificate private key PEM), "
+                + "'caCertChain' (path to the CA certificate PEM), 'keyPassword' (password used for the certificate chain PEM), 'tlsHost' (the tlsName of the Aerospike host). "
+                + "For example: --tls1 '{\"context\":{\"certChain\":\"cert.pem\",\"privateKey\":\"key.pem\",\"caCertChain\":\"cacert.pem\",\"tlsHost\":\"tls1\"}}'");
         options.addOption("t2", "tls2", true, "Set the TLS Policy options on cluster 2. The value passed should be a JSON string. Valid keys in this"
-                + "string inlcude 'protocols', 'ciphers', 'revokeCerts' and 'loginOnly'. For example: -tls2 '{protocols:\"TLSv1,TLSv1.2\",loginOnly:false}");
+                + "string inlcude 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value should be a JSON string which "
+                + "can contain keys 'certChain' (path to the certificate chain PEM), 'privateKey' (path to the certificate private key PEM), "
+                + "'caCertChain' (path to the CA certificate PEM), 'keyPassword' (password used for the certificate chain PEM), 'tlsHost' (the tlsName of the Aerospike host). "
+                + "For example: --tls2 '{\"context\":{\"certChain\":\"cert.pem\",\"privateKey\":\"key.pem\",\"caCertChain\":\"cacert.pem\",\"tlsHost\":\"tls2\"}}'");
         options.addOption("a1", "authMode1", true, "Set the auth mode of cluster1. Default: INTERNAL");
         options.addOption("a2", "authMode2", true, "Set the auth mode of cluster2. Default: INTERNAL");
         options.addOption("cn1", "clusterName1", true, "Set the cluster name of cluster 1");
