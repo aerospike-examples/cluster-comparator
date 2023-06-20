@@ -104,7 +104,7 @@ public class ClusterComparator {
             this.missingRecordHandlers.add(consoleHandler);
             this.recordDifferenceHandlers.add(consoleHandler);
         }
-        if (options.getFileName() != null && (options.getAction() != Action.TOUCH) || options.getAction() != Action.READ) {
+        if (options.getFileName() != null && options.getAction() != Action.TOUCH && options.getAction() != Action.READ) {
             CsvDifferenceHandler csvHandler = new CsvDifferenceHandler(options.getFileName());
             this.missingRecordHandlers.add(csvHandler);
             this.recordDifferenceHandlers.add(csvHandler);

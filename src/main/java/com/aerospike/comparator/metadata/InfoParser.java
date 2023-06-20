@@ -17,6 +17,18 @@ import com.aerospike.client.cluster.Node;
 
 public class InfoParser {
     
+    private List<String> invokeCommandOnAllNodes(IAerospikeClient client, String command) {
+        Node[] nodes = client.getNodes();
+        if (nodes == null || nodes.length == 0) {
+            throw new AerospikeException("No nodes listed in cluster, is Aerospike connected?");
+        }
+        List<String> results = new ArrayList<>();
+        for (Node node : nodes) {
+            results.add(Info.request(node, command));
+        }
+        return results;
+    }
+    
     private String invokeCommand(IAerospikeClient client, String command) {
         Node[] nodes = client.getNodes();
         if (nodes == null || nodes.length == 0) {
@@ -57,12 +69,8 @@ public class InfoParser {
         return results;
     }
     
-    public Map<String, String> invokeCommandReturningObject(IAerospikeClient client, String command) {
-        return invokeCommandReturningObject(client, command, true);
-    }
-    public Map<String, String> invokeCommandReturningObject(IAerospikeClient client, String command, boolean skipMetrics) {
+    private Map<String, String> parseInfoOutputToObject(String rawData, boolean skipMetrics) {
         Map<String, String> result = new HashMap<>();
-        String rawData = invokeCommand(client, command);
         if (rawData != null && rawData.length() > 0) {
             String[] parts = rawData.split(";");
             for (String thisPart : parts) {
@@ -77,6 +85,26 @@ public class InfoParser {
             }
         }
         return result;
+    }
+    
+    public List<Map<String, String>> invokeCommandReturningObjectOnAllNodes(IAerospikeClient client, String command) {
+        return invokeCommandReturningObjectOnAllNodes(client, command, true);
+    }
+    public List<Map<String, String>> invokeCommandReturningObjectOnAllNodes(IAerospikeClient client, String command, boolean skipMetrics) {
+        List<String> allNodesRawData = invokeCommandOnAllNodes(client, command);
+        List<Map<String, String>> result = new ArrayList<>();
+        for (String thisNodeData : allNodesRawData) {
+            result.add(parseInfoOutputToObject(thisNodeData, skipMetrics));
+        }
+        return result;
+    }
+
+    public Map<String, String> invokeCommandReturningObject(IAerospikeClient client, String command) {
+        return invokeCommandReturningObject(client, command, true);
+    }
+    public Map<String, String> invokeCommandReturningObject(IAerospikeClient client, String command, boolean skipMetrics) {
+        String rawData = invokeCommand(client, command);
+        return parseInfoOutputToObject(rawData, skipMetrics);
     }
     
     private Map<String, Field> getFieldsFromClass(Class<?> clazz) {
