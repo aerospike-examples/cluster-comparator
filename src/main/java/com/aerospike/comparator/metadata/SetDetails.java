@@ -1,9 +1,6 @@
 package com.aerospike.comparator.metadata;
 
-import com.aerospike.client.query.IndexCollectionType;
-import com.aerospike.client.query.IndexType;
-
-public class Set implements Equalish {
+public class SetDetails implements Equalish {
     @FieldName("ns") private String namesapce;
     private String set;
     private long objects;
@@ -48,16 +45,14 @@ public class Set implements Equalish {
         if (this == obj) {
             return true;
         }
-        else if (!(obj instanceof Set)) {
+        else if (!(obj instanceof SetDetails)) {
             return false;
         }
-        Set other = (Set)obj;
+        SetDetails other = (SetDetails)obj;
         return equals(this.namesapce, other.namesapce) && 
                 equals(this.set, other.set) &&
                 this.objects == other.objects &&
                 this.tombstones == other.tombstones &&
-                this.memoryDataBytes == other.memoryDataBytes &&
-                this.deviceDataBytes == other.deviceDataBytes &&
                 this.sindexes == other.sindexes &&
                 this.disableEvictions == other.disableEvictions &&
                 this.enableIndex == other.enableIndex &&
@@ -70,10 +65,10 @@ public class Set implements Equalish {
         if (this == obj) {
             return true;
         }
-        else if (!(obj instanceof Set)) {
+        else if (!(obj instanceof SetDetails)) {
             return false;
         }
-        Set other = (Set)obj;
+        SetDetails other = (SetDetails)obj;
         return equals(this.namesapce, other.namesapce) && 
                 equals(this.set, other.set) &&
                 this.objects == other.objects &&

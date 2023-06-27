@@ -167,6 +167,8 @@ Scanning a single partition requires only a single server-side thread -- there i
 
 Hence, concurrency is controlled by the client. Each thread will scan one partition before moving onto the next partition. There can be multiple concurrent client threads scanning different partitions, each of which will consume one server-side scan thread for each of the clusters.
 
+**Note**: if you have a node 
+
 ### Examples
 
 ```

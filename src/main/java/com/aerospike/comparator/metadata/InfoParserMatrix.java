@@ -10,13 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.bouncycastle.pqc.math.linearalgebra.Matrix;
+
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Info;
 import com.aerospike.client.cluster.Node;
 
-public class InfoParser {
-    
+public class InfoParserMatrix {
+    /*
     public static class NodeData extends NamedData {
         public NodeData(String nodeName, Object data) {
             super(nodeName, data);
@@ -32,14 +34,14 @@ public class InfoParser {
         }
     }
     
-    private List<String> invokeCommandOnAllNodes(IAerospikeClient client, String command) {
+    private List<NamedData<String>> invokeCommandOnAllNodes(IAerospikeClient client, String command) {
         Node[] nodes = client.getNodes();
         if (nodes == null || nodes.length == 0) {
             throw new AerospikeException("No nodes listed in cluster, is Aerospike connected?");
         }
-        List<String> results = new ArrayList<>();
+        List<NamedData> results = new ArrayList<>();
         for (Node node : nodes) {
-            results.add(Info.request(node, command));
+            results.add(new NamedData(node.getName(), Info.request(node, command)));
         }
         return results;
     }
@@ -110,16 +112,33 @@ public class InfoParser {
         return parseInfoOutputToObjectList(rawData, skipMetrics);
     }
     
-    public List<List<Map<String, String>>> invokeCommandReturningObjectListOnAllNodes(IAerospikeClient client, String command) {
-        return invokeCommandReturningObjectListOnAllNodes(client, command, true);
+    public NamedMatrix<Map<String, String>> invokeCommandReturningObjectListOnAllNodes(IAerospikeClient client, String command, NameFinder nameFinder) {
+        return invokeCommandReturningObjectListOnAllNodes(client, command, true, nameFinder);
     }
-    public List<List<Map<String, String>>> invokeCommandReturningObjectListOnAllNodes(IAerospikeClient client, String command, boolean skipMetrics) {
-        List<List<Map<String, String>>> results = new ArrayList<>();
-        List<String> rawDatas = invokeCommandOnAllNodes(client, command);
-        for (String rawData : rawDatas) {
-            results.add(parseInfoOutputToObjectList(rawData, skipMetrics));
+    */
+    /**
+     * Get a matrix where the rows are the variables extracted from the object via the name finder and the columns are
+     * the node names. For example, if the command is "sets" and the name finder returns "map.get("ns") + "." + map.get("set")" then the
+     * rows will be the namespace + set names and there will be a column per node.
+     * <p>
+     * Note that the matrix will not contain nulls, so if set is only on 3 of 5 nodes you will just get 3 columns back.
+     * @param client
+     * @param command
+     * @param skipMetrics
+     * @param nameFinder
+     * @return
+     */
+    /*
+    public NamedMatrix<Map<String, String>> invokeCommandReturningObjectListOnAllNodes(IAerospikeClient client, String command, boolean skipMetrics, NameFinder nameFinder) {
+        NamedMatrix<Map<String, String>> matrix = new NamedMatrix<>();
+        List<NamedData<String>> rawDatas = invokeCommandOnAllNodes(client, command);
+        for (NamedData<String> nodeData : rawDatas) {
+            List<Map<String, String>> objectList = parseInfoOutputToObjectList(nodeData.getData(), skipMetrics); 
+            for (Map<String, String> object : objectList) {
+                matrix.put(nameFinder.getName(object), nodeData.getName(), object);
+            }
         }
-        return results;
+        return matrix;
     }
     
     public List<Map<String, String>> invokeCommandReturningObjectOnAllNodes(IAerospikeClient client, String command) {
@@ -269,5 +288,6 @@ public class InfoParser {
         List<Map<String, String>> results = this.invokeCommandReturningObjectList(client, command, false);
         return parseObjectListStringsToObjectList(results, clazz);
     }
+    */
 }
 

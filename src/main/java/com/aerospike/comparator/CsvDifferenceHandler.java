@@ -21,11 +21,11 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
     }
 
     @Override
-    public synchronized void handle(int partitionId, Key key, boolean missingFromSide1) throws IOException {
-        String side1Digest = missingFromSide1 ? "" : Buffer.bytesToHexString(key.digest);
-        String side2Digest = missingFromSide1 ? Buffer.bytesToHexString(key.digest) : "";
-        writer.printf("%s,%s,%s,%s,%s,%s\n", key.namespace, key.setName, key.userKey, side1Digest, side2Digest,
-                missingFromSide1 ? "Side 1 missing" : "Side 2 missing");
+    public synchronized void handle(int partitionId, Key key, Side missingFromSide) throws IOException {
+        String side1Digest = missingFromSide == Side.SIDE_1 ? "" : Buffer.bytesToHexString(key.digest);
+        String side2Digest = missingFromSide == Side.SIDE_2 ? "" : Buffer.bytesToHexString(key.digest);
+        writer.printf("%s,%s,%s,%s,%s,Side %d missing\n", key.namespace, key.setName, key.userKey, side1Digest, side2Digest,
+                missingFromSide.value);
         writer.flush();
     }
 

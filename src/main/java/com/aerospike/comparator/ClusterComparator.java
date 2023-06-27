@@ -45,6 +45,7 @@ public class ClusterComparator {
     // - Compare metadata -- sindex, set indexes, etc.
     // - Ability to compare different sets (scan/batch comparator) Note: how to ensure it's not just a one-way comparison?
     // - TLS Support
+    
     private final int startPartition;
     private final int endPartition;
     private final AtomicLong recordsCluster1Processed = new AtomicLong();
@@ -73,8 +74,8 @@ public class ClusterComparator {
         }
         
         @Override
-        public void handle(int partitionId, Key key, boolean missingFromSide1) throws IOException {
-            if (missingFromSide1) {
+        public void handle(int partitionId, Key key, Side missingFromSide) throws IOException {
+            if (missingFromSide == Side.SIDE_1) {
                 missingRecordsCluster1.incrementAndGet();
             }
             else {
@@ -125,26 +126,27 @@ public class ClusterComparator {
         }
     }
     
-    public IAerospikeClient connectClient(boolean isCluster1) {
+    public IAerospikeClient connectClient(Side side) {
         ClientPolicy clientPolicy = new ClientPolicy();
-        clientPolicy.user = isCluster1 ? options.getUserName1() : options.getUserName2();
-        clientPolicy.password = isCluster1 ? options.getPassword1() : options.getPassword2();
-        clientPolicy.tlsPolicy = isCluster1 ? options.getTlsPolicy1() : options.getTlsPolicy2();
-        clientPolicy.authMode = isCluster1 ? options.getAuthMode1() : options.getAuthMode2();
-        clientPolicy.clusterName = isCluster1 ? options.getClusterName1() : options.getClusterName2();
-        Host[] hosts = isCluster1 ? Host.parseHosts(options.getHosts1(), 3000) : Host.parseHosts(options.getHosts2(), 3000);
+        clientPolicy.user = (side == Side.SIDE_1) ? options.getUserName1() : options.getUserName2();
+        clientPolicy.password = (side == Side.SIDE_1) ? options.getPassword1() : options.getPassword2();
+        clientPolicy.tlsPolicy = (side == Side.SIDE_1) ? options.getTlsPolicy1() : options.getTlsPolicy2();
+        clientPolicy.authMode = (side == Side.SIDE_1) ? options.getAuthMode1() : options.getAuthMode2();
+        clientPolicy.clusterName = (side == Side.SIDE_1) ? options.getClusterName1() : options.getClusterName2();
+        clientPolicy.useServicesAlternate = (side == Side.SIDE_1) ? options.isServicesAlternate1() : options.isServicesAlternate2();
+        Host[] hosts = (side == Side.SIDE_1) ? Host.parseHosts(options.getHosts1(), 3000) : Host.parseHosts(options.getHosts2(), 3000);
         
         if (clientPolicy.user != null && clientPolicy.password == null) {
             java.io.Console console = System.console();
             if (console != null) {
-                char[] pass = console.readPassword("Enter password for cluster " + (isCluster1 ? "1" : "2") +  ": ");
+                char[] pass = console.readPassword("Enter password for cluster " + ((side == Side.SIDE_1) ? "1" : "2") +  ": ");
                 if (pass != null) {
                     clientPolicy.password = new String(pass);
                 }
             }
         }
         if (!options.isSilent()) {
-            System.out.printf("Cluster %d: name: %s, hosts: %s user: %s, password: %s\n", isCluster1 ? 1 : 2, 
+            System.out.printf("Cluster %d: name: %s, hosts: %s user: %s, password: %s\n", side.value, 
                     clientPolicy.clusterName, Arrays.toString(hosts), clientPolicy.user, clientPolicy.password == null ? "null" : "********");
             System.out.printf("         authMode: %s, tlsPolicy: %s\n", clientPolicy.authMode, tlsPolicyAsString(clientPolicy.tlsPolicy));
         }
@@ -216,10 +218,10 @@ public class ClusterComparator {
             }
         }
     }
-    private void missingRecord(IAerospikeClient clientWithKey, int partitionId, Key key, boolean missingFromSide1) {
+    private void missingRecord(IAerospikeClient clientWithKey, int partitionId, Key key, Side missingFromSide) {
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
             try {
-                thisHandler.handle(partitionId, key, missingFromSide1);
+                thisHandler.handle(partitionId, key, missingFromSide);
             }
             catch (Exception e) {
                 System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
@@ -235,15 +237,15 @@ public class ClusterComparator {
         }
     }
     
-    private boolean getNextRecord(RecordSet recordSet, int side) {
+    private boolean getNextRecord(RecordSet recordSet, Side side) {
         boolean result = recordSet.next();
         if (result) {
             switch (side) {
-            case 1: 
+            case SIDE_1: 
                 recordsCluster1Processed.incrementAndGet();
                 break;
                 
-            case 2:
+            case SIDE_2:
                 recordsCluster2Processed.incrementAndGet();
             }
         }
@@ -291,8 +293,8 @@ public class ClusterComparator {
         
         RecordSet recordSet1 = client1.queryPartitions(queryPolicy, statement, filter1);
         RecordSet recordSet2 = client2.queryPartitions(queryPolicy, statement, filter2);
-        boolean side2Valid = getNextRecord(recordSet2, 2);
-        boolean side1Valid = getNextRecord(recordSet1, 1);
+        boolean side1Valid = getNextRecord(recordSet1, Side.SIDE_1);
+        boolean side2Valid = getNextRecord(recordSet2, Side.SIDE_2);
 
         RecordComparator comparator = new RecordComparator();
 
@@ -305,21 +307,20 @@ public class ClusterComparator {
                 if (result < 0) {
                     // The digests go down as we go through the partition, so if side 2 is > side 1
                     // it means that side 1 has missed this one and we need to advance side2
-                    missingRecord(client2, partitionId, key2, true);
-                    side2Valid = getNextRecord(recordSet2, 2);
+                    missingRecord(client2, partitionId, key2, Side.SIDE_1);
+                    side2Valid = getNextRecord(recordSet2, Side.SIDE_2);
                 }
                 else if (result > 0) {
                     // The digests go down as we go through the partition, so if side 1 is > side 2
                     // it means that side 2 has missed this one and we need to advance side1
-                    missingRecord(client1, partitionId, key1, false);
-                    side1Valid = getNextRecord(recordSet1, 1);
+                    missingRecord(client1, partitionId, key1, Side.SIDE_2);
+                    side1Valid = getNextRecord(recordSet1, Side.SIDE_1);
                 }
                 else {
                     if (options.isRecordLevelCompare()) {
                         Record record1 = recordSet1.getRecord();
                         Record record2 = recordSet2.getRecord();
                         DifferenceSet compareResult = comparator.compare(key1, record1, record2,
-                                // TODO: Add in options for the paths of case incompare
                                 options.getPathOptions(),
                                 options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
                         if (compareResult.areDifferent()) {
@@ -330,8 +331,8 @@ public class ClusterComparator {
                         }
                     }
                     // The keys are equal, move on.
-                    side2Valid = getNextRecord(recordSet2, 2);
-                    side1Valid = getNextRecord(recordSet1, 1);
+                    side1Valid = getNextRecord(recordSet1, Side.SIDE_1);
+                    side2Valid = getNextRecord(recordSet2, Side.SIDE_2);
                 }
             }
         }
@@ -581,8 +582,8 @@ public class ClusterComparator {
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());
         }
-        IAerospikeClient client1 = this.connectClient(true);
-        IAerospikeClient client2 = this.connectClient(false);
+        IAerospikeClient client1 = this.connectClient(Side.SIDE_1);
+        IAerospikeClient client2 = this.connectClient(Side.SIDE_2);
         Scanner input = null;
         try {
             if (options.getAction() == Action.TOUCH) {

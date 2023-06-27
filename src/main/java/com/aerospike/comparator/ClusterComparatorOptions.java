@@ -72,13 +72,14 @@ public class ClusterComparatorOptions {
     private TlsPolicy tlsPolicy2;
     private AuthMode authMode1;
     private AuthMode authMode2;
+    private boolean servicesAlternate1;
+    private boolean servicesAlternate2;
     private long missingRecordsLimit;
     private Date beginDate = null;
     private Date endDate = null;
     private SimpleDateFormat dateFormat = new SimpleDateFormat(DEFAULT_DATE_FORMAT);
     private PathOptions pathOptions = null; 
     private long recordCompareLimit;
-    private String tlsHost = null;
     private boolean metadataCompare = false;
     
     private static class ParseException extends RuntimeException {
@@ -382,6 +383,8 @@ public class ClusterComparatorOptions {
         options.addOption("a2", "authMode2", true, "Set the auth mode of cluster2. Default: INTERNAL");
         options.addOption("cn1", "clusterName1", true, "Set the cluster name of cluster 1");
         options.addOption("cn2", "clusterName2", true, "Set the cluster name of cluster 2");
+        options.addOption("sa1", "useServicesAlternate1", false, "Use services alternative when connecting to cluster 1");
+        options.addOption("sa2", "useServicesAlternate2", false, "Use services alternative when connecting to cluster 2");
         options.addOption("db", "beginDate", true, "Specify the begin date of the scan. Any records whose last update time is this time or greater will be included in the scan. The format of the date is "
                 + "by default "+DEFAULT_DATE_FORMAT+" but can be changed with -df flag. If the parameter is a just a number this will be treated as the epoch since 1/1/1970. If the end date "
                 + "is also specified, only records falling between the 2 dates will be scanned. Default: scan from the start of time.");
@@ -490,6 +493,8 @@ public class ClusterComparatorOptions {
         this.authMode2 = AuthMode.valueOf(cl.getOptionValue("authMode2", "INTERNAL").toUpperCase());
         this.clusterName1 = cl.getOptionValue("clusterName1");
         this.clusterName2 = cl.getOptionValue("clusterName2");
+        this.servicesAlternate1 = cl.hasOption("useServicesAlternate1");
+        this.servicesAlternate2 = cl.hasOption("useServicesAlternate2");
         this.console = cl.hasOption("console");
         this.missingRecordsLimit = Long.valueOf(cl.getOptionValue("limit", "0"));
         this.compareMode = CompareMode.valueOf(cl.getOptionValue("compareMode", CompareMode.MISSING_RECORDS.toString()).toUpperCase());
@@ -656,6 +661,14 @@ public class ClusterComparatorOptions {
     
     public boolean isMetadataCompare() {
         return metadataCompare;
+    }
+    
+    public boolean isServicesAlternate1() {
+        return servicesAlternate1;
+    }
+    
+    public boolean isServicesAlternate2() {
+        return servicesAlternate2;
     }
 }
 
