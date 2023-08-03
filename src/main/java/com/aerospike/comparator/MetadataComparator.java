@@ -8,10 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
-import com.aerospike.client.cluster.Node;
 import com.aerospike.comparator.RecordComparator.DifferenceType;
+import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
 import com.aerospike.comparator.metadata.InfoParser;
 import com.aerospike.comparator.metadata.MismatchingOnCluster;
 
@@ -36,7 +35,7 @@ public class MetadataComparator {
         }
     }
     
-    private void compareNamespaces(IAerospikeClient client1, IAerospikeClient client2, DifferenceSet differenceSet) {
+    private void compareNamespaces(AerospikeClientAccess client1, AerospikeClientAccess client2, DifferenceSet differenceSet) {
         Set<String> namespaces1 = this.infoParser.invokeCommandReturningSetOnAllNodes(client1, "namespaces");
         Set<String> namespaces2 = this.infoParser.invokeCommandReturningSetOnAllNodes(client2, "namespaces");
         
@@ -47,8 +46,8 @@ public class MetadataComparator {
                 List<Map<String, String>> nsDifferences2 = this.infoParser.invokeCommandReturningObjectOnAllNodes(client2, "namespace/" + nsName);
                 this.filterOut(nsDifferences1, NS_FILTER_OUT);
                 this.filterOut(nsDifferences1, NS_FILTER_OUT);
-                this.removeMismatchesBetweenNodes(nsDifferences1, differenceSet, client1.getNodes(), Side.SIDE_1);
-                this.removeMismatchesBetweenNodes(nsDifferences2, differenceSet, client2.getNodes(), Side.SIDE_2);
+                this.removeMismatchesBetweenNodes(nsDifferences1, differenceSet, client1.getNodeNames(), Side.SIDE_1);
+                this.removeMismatchesBetweenNodes(nsDifferences2, differenceSet, client2.getNodeNames(), Side.SIDE_2);
                 RecordComparator comparator = new RecordComparator();
                 comparator.compare(nsDifferences1.get(0), nsDifferences2.get(0), differenceSet);
                 differenceSet.popPath(2);
@@ -77,7 +76,8 @@ public class MetadataComparator {
         Map<String, List<Map<String, String>>> objects = new HashMap<>();
         return results;
     }
-    private void compareSets(IAerospikeClient client1, IAerospikeClient client2, DifferenceSet differenceSet) {
+    
+    private void compareSets(AerospikeClientAccess client1, AerospikeClientAccess client2, DifferenceSet differenceSet) {
         List<List<Map<String, String>>> sets1 = this.infoParser.invokeCommandReturningObjectListOnAllNodes(client1, "sets");
         List<List<Map<String, String>>> sets2 = this.infoParser.invokeCommandReturningObjectListOnAllNodes(client2, "sets");
 /*
@@ -115,7 +115,7 @@ public class MetadataComparator {
         */
     }
     
-    private void removeMismatchesBetweenNodes(List<Map<String, String>> data, DifferenceSet differences, Node[] nodes, Side side) {
+    private void removeMismatchesBetweenNodes(List<Map<String, String>> data, DifferenceSet differences, List<String> nodeNames, Side side) {
         if (data == null || data.isEmpty()) {
             return;
         }
@@ -128,7 +128,7 @@ public class MetadataComparator {
             String item0 = data.get(0).get(key);
             boolean allEqual = data.stream().allMatch(dataItem -> item0.equals(dataItem.get(key)));
             if (!allEqual) {
-                String mismatchString = new MismatchingOnCluster(key).addMismatchingValues(data, nodes, side).toString();
+                String mismatchString = new MismatchingOnCluster(key).addMismatchingValues(data, nodeNames, side).toString();
                 differences.addDifference(key, DifferenceType.CONTENTS, side == Side.SIDE_1 ? mismatchString : "", side == Side.SIDE_2 ? mismatchString : "");
                 for (Map<String, String> thisMap : data) {
                     thisMap.remove(key);
@@ -137,18 +137,18 @@ public class MetadataComparator {
         }
     }
     
-    public void compareStanzas(IAerospikeClient client1, IAerospikeClient client2, String stanza, DifferenceSet differenceSet) {
+    public void compareStanzas(AerospikeClientAccess client1, AerospikeClientAccess client2, String stanza, DifferenceSet differenceSet) {
         List<Map<String, String>> client1Config = this.infoParser.invokeCommandReturningObjectOnAllNodes(client1, "get-config:context="+stanza);
         List<Map<String, String>> client2Config = this.infoParser.invokeCommandReturningObjectOnAllNodes(client2, "get-config:context="+stanza);
         differenceSet.pushPath(stanza);
-        removeMismatchesBetweenNodes(client1Config, differenceSet, client1.getNodes(), Side.SIDE_1);
-        removeMismatchesBetweenNodes(client2Config, differenceSet, client2.getNodes(), Side.SIDE_2);
+        removeMismatchesBetweenNodes(client1Config, differenceSet, client1.getNodeNames(), Side.SIDE_1);
+        removeMismatchesBetweenNodes(client2Config, differenceSet, client2.getNodeNames(), Side.SIDE_2);
         RecordComparator comparator = new RecordComparator();
         comparator.compare(client1Config.get(0), client2Config.get(0), differenceSet);
         differenceSet.popPath();
     }
     
-    public DifferenceSet compareMetaData(IAerospikeClient client1, IAerospikeClient client2) {
+    public DifferenceSet compareMetaData(AerospikeClientAccess client1, AerospikeClientAccess client2) {
         DifferenceSet differenceSet = new DifferenceSet(new Key("config", "", ""), false, options.getPathOptions());
         differenceSet.pushPath("/config");
         compareStanzas(client1, client2, "network", differenceSet);

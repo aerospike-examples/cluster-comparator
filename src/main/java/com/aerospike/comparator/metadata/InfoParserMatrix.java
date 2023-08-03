@@ -10,15 +10,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.bouncycastle.pqc.math.linearalgebra.Matrix;
-
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.IAerospikeClient;
-import com.aerospike.client.Info;
-import com.aerospike.client.cluster.Node;
+import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
 
 public class InfoParserMatrix {
-    /*
     public static class NodeData extends NamedData {
         public NodeData(String nodeName, Object data) {
             super(nodeName, data);
@@ -34,14 +30,11 @@ public class InfoParserMatrix {
         }
     }
     
-    private List<NamedData<String>> invokeCommandOnAllNodes(IAerospikeClient client, String command) {
-        Node[] nodes = client.getNodes();
-        if (nodes == null || nodes.length == 0) {
-            throw new AerospikeException("No nodes listed in cluster, is Aerospike connected?");
-        }
-        List<NamedData> results = new ArrayList<>();
-        for (Node node : nodes) {
-            results.add(new NamedData(node.getName(), Info.request(node, command)));
+    private List<NamedData<String>> invokeCommandOnAllNodes(AerospikeClientAccess client, String command) {
+        List<NamedData<String>> results = new ArrayList<>();
+        Map<String, String> infoResults = client.invokeInfoCommandOnAllNodes(command);
+        for (String nodeName : infoResults.keySet()) {
+            results.add(new NamedData<String>(nodeName, infoResults.get(nodeName)));
         }
         return results;
     }
@@ -82,40 +75,36 @@ public class InfoParserMatrix {
         return results;
     }
 
-    private String invokeCommand(IAerospikeClient client, String command) {
-        Node[] nodes = client.getNodes();
-        if (nodes == null || nodes.length == 0) {
-            throw new AerospikeException("No nodes listed in cluster, is Aerospike connected?");
-        }
-        return Info.request(nodes[0], command);
+    private String invokeCommand(AerospikeClientAccess client, String command) {
+        return client.invokeInfoCommandOnANode(command);
     }
 
-    public Set<String> invokeCommandReturningSet(IAerospikeClient client, String command) {
+    public Set<String> invokeCommandReturningSet(AerospikeClientAccess client, String command) {
         String rawData = invokeCommand(client, command);
         return new HashSet<String>(Arrays.asList(rawData.split(";")));
     }
     
-    public Set<String> invokeCommandReturningSetOnAllNodes(IAerospikeClient client, String command) {
-        List<String> rawData = invokeCommandOnAllNodes(client, command);
+    public Set<String> invokeCommandReturningSetOnAllNodes(AerospikeClientAccess client, String command) {
+        List<NamedData<String>> rawData = invokeCommandOnAllNodes(client, command);
         Set<String> results = new HashSet<>();
-        for (String thisData : rawData) {
-            results.addAll(Arrays.asList(thisData.split(";")));
+        for (NamedData<String> thisData : rawData) {
+            results.addAll(Arrays.asList(thisData.getData().split(";")));
         }
         return results;
     }
 
-    public List<Map<String, String>> invokeCommandReturningObjectList(IAerospikeClient client, String command) {
+    public List<Map<String, String>> invokeCommandReturningObjectList(AerospikeClientAccess client, String command) {
         return invokeCommandReturningObjectList(client,command, true);
     }
-    public List<Map<String, String>> invokeCommandReturningObjectList(IAerospikeClient client, String command, boolean skipMetrics) {
+    
+    public List<Map<String, String>> invokeCommandReturningObjectList(AerospikeClientAccess client, String command, boolean skipMetrics) {
         String rawData = invokeCommand(client, command);
         return parseInfoOutputToObjectList(rawData, skipMetrics);
     }
     
-    public NamedMatrix<Map<String, String>> invokeCommandReturningObjectListOnAllNodes(IAerospikeClient client, String command, NameFinder nameFinder) {
+    public NamedMatrix<Map<String, String>> invokeCommandReturningObjectListOnAllNodes(AerospikeClientAccess client, String command, NameFinder nameFinder) {
         return invokeCommandReturningObjectListOnAllNodes(client, command, true, nameFinder);
     }
-    */
     /**
      * Get a matrix where the rows are the variables extracted from the object via the name finder and the columns are
      * the node names. For example, if the command is "sets" and the name finder returns "map.get("ns") + "." + map.get("set")" then the
@@ -128,8 +117,7 @@ public class InfoParserMatrix {
      * @param nameFinder
      * @return
      */
-    /*
-    public NamedMatrix<Map<String, String>> invokeCommandReturningObjectListOnAllNodes(IAerospikeClient client, String command, boolean skipMetrics, NameFinder nameFinder) {
+    public NamedMatrix<Map<String, String>> invokeCommandReturningObjectListOnAllNodes(AerospikeClientAccess client, String command, boolean skipMetrics, NameFinder nameFinder) {
         NamedMatrix<Map<String, String>> matrix = new NamedMatrix<>();
         List<NamedData<String>> rawDatas = invokeCommandOnAllNodes(client, command);
         for (NamedData<String> nodeData : rawDatas) {
@@ -141,22 +129,24 @@ public class InfoParserMatrix {
         return matrix;
     }
     
-    public List<Map<String, String>> invokeCommandReturningObjectOnAllNodes(IAerospikeClient client, String command) {
+    public List<Map<String, String>> invokeCommandReturningObjectOnAllNodes(AerospikeClientAccess client, String command) {
         return invokeCommandReturningObjectOnAllNodes(client, command, true);
     }
-    public List<Map<String, String>> invokeCommandReturningObjectOnAllNodes(IAerospikeClient client, String command, boolean skipMetrics) {
-        List<String> allNodesRawData = invokeCommandOnAllNodes(client, command);
+    
+    public List<Map<String, String>> invokeCommandReturningObjectOnAllNodes(AerospikeClientAccess client, String command, boolean skipMetrics) {
+        List<NamedData<String>> allNodesRawData = invokeCommandOnAllNodes(client, command);
         List<Map<String, String>> result = new ArrayList<>();
-        for (String thisNodeData : allNodesRawData) {
-            result.add(parseInfoOutputToObject(thisNodeData, skipMetrics));
+        for (NamedData<String> thisNodeData : allNodesRawData) {
+            result.add(parseInfoOutputToObject(thisNodeData.getData(), skipMetrics));
         }
         return result;
     }
 
-    public Map<String, String> invokeCommandReturningObject(IAerospikeClient client, String command) {
+    public Map<String, String> invokeCommandReturningObject(AerospikeClientAccess client, String command) {
         return invokeCommandReturningObject(client, command, true);
     }
-    public Map<String, String> invokeCommandReturningObject(IAerospikeClient client, String command, boolean skipMetrics) {
+    
+    public Map<String, String> invokeCommandReturningObject(AerospikeClientAccess client, String command, boolean skipMetrics) {
         String rawData = invokeCommand(client, command);
         return parseInfoOutputToObject(rawData, skipMetrics);
     }
@@ -275,19 +265,21 @@ public class InfoParserMatrix {
         return objects;
     }
     
-    public <T> List<List<T>> invokeCommandOnAllNodes(IAerospikeClient client, String command, Class<T> clazz) {
-        List<List<Map<String, String>>> results = this.invokeCommandReturningObjectListOnAllNodes(client, command, false);
-        List<List<T>> objectList = new ArrayList<>();
-        
+    /*
+    public <T> List<List<T>> invokeCommandOnAllNodes(IAerospikeClient client, String command, Class<T> clazz, NameFinder nameFinder) {
+        NamedMatrix<Map<String, String>> results = this.invokeCommandReturningObjectListOnAllNodes(client, command, false, nameFinder);
+        NamedMatrix<T> results = new NamedMatrix<>();
+
+        parseOb
         for (List<Map<String, String>> thisResult : results) {
             objectList.add(parseObjectListStringsToObjectList(thisResult, clazz));
         }
         return objectList;
     }
-    public <T> List<T> invokeCommand(IAerospikeClient client, String command, Class<T> clazz) {
+    */
+    public <T> List<T> invokeCommand(AerospikeClientAccess client, String command, Class<T> clazz) {
         List<Map<String, String>> results = this.invokeCommandReturningObjectList(client, command, false);
         return parseObjectListStringsToObjectList(results, clazz);
     }
-    */
 }
 

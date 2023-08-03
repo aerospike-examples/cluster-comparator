@@ -20,7 +20,6 @@ import java.util.stream.IntStream;
 import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Host;
-import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.ResultCode;
@@ -29,12 +28,14 @@ import com.aerospike.client.exp.Expression;
 import com.aerospike.client.policy.ClientPolicy;
 import com.aerospike.client.policy.QueryPolicy;
 import com.aerospike.client.policy.TlsPolicy;
-import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.RecordSet;
 import com.aerospike.client.query.Statement;
 import com.aerospike.comparator.ClusterComparatorOptions.Action;
 import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
+import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
+import com.aerospike.comparator.dbaccess.LocalAerospikeClient;
+import com.aerospike.comparator.dbaccess.RecordSetAccess;
 
 public class ClusterComparator {
 
@@ -44,7 +45,6 @@ public class ClusterComparator {
     // - Or msgpack
     // - Compare metadata -- sindex, set indexes, etc.
     // - Ability to compare different sets (scan/batch comparator) Note: how to ensure it's not just a one-way comparison?
-    // - TLS Support
     
     private final int startPartition;
     private final int endPartition;
@@ -126,7 +126,7 @@ public class ClusterComparator {
         }
     }
     
-    public IAerospikeClient connectClient(Side side) {
+    public AerospikeClientAccess connectClient(Side side) {
         ClientPolicy clientPolicy = new ClientPolicy();
         clientPolicy.user = (side == Side.SIDE_1) ? options.getUserName1() : options.getUserName2();
         clientPolicy.password = (side == Side.SIDE_1) ? options.getPassword1() : options.getPassword2();
@@ -150,10 +150,10 @@ public class ClusterComparator {
                     clientPolicy.clusterName, Arrays.toString(hosts), clientPolicy.user, clientPolicy.password == null ? "null" : "********");
             System.out.printf("         authMode: %s, tlsPolicy: %s\n", clientPolicy.authMode, tlsPolicyAsString(clientPolicy.tlsPolicy));
         }
-        return new AerospikeClient(clientPolicy, hosts);
+        return new LocalAerospikeClient(new AerospikeClient(clientPolicy, hosts));
     }
 
-    private List<Integer> quickCompare(IAerospikeClient client1, IAerospikeClient client2, String namespace) {
+    private List<Integer> quickCompare(AerospikeClientAccess client1, AerospikeClientAccess client2, String namespace) {
         PartitionMap partitionMap1 = new PartitionMap(client1);
         PartitionMap partitionMap2 = new PartitionMap(client2);
         if (!partitionMap1.isComplete(namespace)) {
@@ -218,7 +218,7 @@ public class ClusterComparator {
             }
         }
     }
-    private void missingRecord(IAerospikeClient clientWithKey, int partitionId, Key key, Side missingFromSide) {
+    private void missingRecord(AerospikeClientAccess clientWithKey, int partitionId, Key key, Side missingFromSide) {
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
             try {
                 thisHandler.handle(partitionId, key, missingFromSide);
@@ -230,14 +230,14 @@ public class ClusterComparator {
             }
         }
         if (this.options.getAction() == Action.SCAN_TOUCH) {
-            touchRecord(clientWithKey.getWritePolicyDefault(), clientWithKey, key);
+            touchRecord(clientWithKey, key);
         }
         if (this.options.getAction() == Action.SCAN_READ) {
-            readRecord(clientWithKey.getWritePolicyDefault(), clientWithKey, key);
+            readRecord(clientWithKey, key);
         }
     }
     
-    private boolean getNextRecord(RecordSet recordSet, Side side) {
+    private boolean getNextRecord(RecordSetAccess recordSet, Side side) {
         boolean result = recordSet.next();
         if (result) {
             switch (side) {
@@ -272,7 +272,7 @@ public class ClusterComparator {
         }
     }
     
-    private void comparePartition(IAerospikeClient client1, IAerospikeClient client2, String namespace, String setName, int partitionId) {
+    private void comparePartition(AerospikeClientAccess client1, AerospikeClientAccess client2, String namespace, String setName, int partitionId) {
         QueryPolicy queryPolicy = new QueryPolicy();
         queryPolicy.maxConcurrentNodes = 1;
         queryPolicy.includeBinData = options.isRecordLevelCompare();
@@ -291,8 +291,8 @@ public class ClusterComparator {
         PartitionFilter filter1 = PartitionFilter.id(partitionId);
         PartitionFilter filter2 = PartitionFilter.id(partitionId);
         
-        RecordSet recordSet1 = client1.queryPartitions(queryPolicy, statement, filter1);
-        RecordSet recordSet2 = client2.queryPartitions(queryPolicy, statement, filter2);
+        RecordSetAccess recordSet1 = client1.queryPartitions(queryPolicy, statement, filter1);
+        RecordSetAccess recordSet2 = client2.queryPartitions(queryPolicy, statement, filter2);
         boolean side1Valid = getNextRecord(recordSet1, Side.SIDE_1);
         boolean side2Valid = getNextRecord(recordSet2, Side.SIDE_2);
 
@@ -342,7 +342,7 @@ public class ClusterComparator {
         }
     }
 
-    private void beginComparison(IAerospikeClient client1, IAerospikeClient client2, String namespace, String setName) throws InterruptedException {
+    private void beginComparison(AerospikeClientAccess client1, AerospikeClientAccess client2, String namespace, String setName) throws InterruptedException {
         recordsCluster1Processed.set(0);
         recordsCluster2Processed.set(0);
         missingRecordsCluster1.set(0);
@@ -411,7 +411,7 @@ public class ClusterComparator {
         this.monitorProgress(namespace, setName);
     }
     
-    private void beginComparisons(IAerospikeClient client1, IAerospikeClient client2) throws InterruptedException {
+    private void beginComparisons(AerospikeClientAccess client1, AerospikeClientAccess client2) throws InterruptedException {
         this.threadsToUse = options.getThreads() <= 0 ? Runtime.getRuntime().availableProcessors() : options.getThreads();
         this.filterExpresion = formFilterExpression();
 
@@ -493,9 +493,9 @@ public class ClusterComparator {
         return data;
     }
     
-    private void touchRecord(WritePolicy writePolicy, IAerospikeClient client, Key key) {
+    private void touchRecord(AerospikeClientAccess client, Key key) {
         try {
-            client.touch(writePolicy, key);
+            client.touch(null, key);
             if (!options.isSilent()) {
                 System.out.println("Touching record " + key);
             }
@@ -507,9 +507,9 @@ public class ClusterComparator {
         }
     }
 
-    private void readRecord(WritePolicy writePolicy, IAerospikeClient client, Key key) {
+    private void readRecord(AerospikeClientAccess client, Key key) {
         try {
-            client.get(writePolicy, key);
+            client.get(null, key);
             if (!options.isSilent()) {
                 System.out.println("Reading record " + key);
             }
@@ -521,17 +521,17 @@ public class ClusterComparator {
         }
     }
 
-    private void touchRecord(WritePolicy writePolicy, IAerospikeClient client, String namespace, String setName, String digest) {
+    private void touchRecord(AerospikeClientAccess client, String namespace, String setName, String digest) {
         Key key = new Key(namespace, hexStringToByteArray(digest), setName, null);
-        touchRecord(writePolicy, client, key);
+        touchRecord(client, key);
     }
     
-    private void readRecord(WritePolicy writePolicy, IAerospikeClient client, String namespace, String setName, String digest) {
+    private void readRecord(AerospikeClientAccess client, String namespace, String setName, String digest) {
         Key key = new Key(namespace, hexStringToByteArray(digest), setName, null);
-        readRecord(writePolicy, client, key);
+        readRecord(client, key);
     }
     
-    private void processRecords(IAerospikeClient client1, IAerospikeClient client2, boolean touch, boolean read) throws IOException {
+    private void processRecords(AerospikeClientAccess client1, AerospikeClientAccess client2, boolean touch, boolean read) throws IOException {
         File file = new File(options.getFileName());
         BufferedReader br = new BufferedReader(new FileReader(file));
         
@@ -540,8 +540,6 @@ public class ClusterComparator {
             if (!CsvDifferenceHandler.FILE_HEADER.equals(line)) {
                 throw new UnsupportedOperationException("File " + options.getFileName() + " has a header which does not match what was expected. Expected '" + CsvDifferenceHandler.FILE_HEADER + "' but received '" + line + "'");
             }
-            WritePolicy writePolicy1 = new WritePolicy(client1.getWritePolicyDefault());
-            WritePolicy writePolicy2 = new WritePolicy(client2.getWritePolicyDefault());
 
             while ((line = br.readLine()) != null) {
                 String[] linePart = line.split(",");
@@ -552,18 +550,18 @@ public class ClusterComparator {
                 String digest2 = linePart.length >= 5 ? linePart[4] : null;
                 if (digest1 != null && !digest1.trim().isEmpty() && !"null".equals(digest1)) {
                     if (read) {
-                        this.readRecord(writePolicy1, client1, namespace, setName, digest1);
+                        this.readRecord(client1, namespace, setName, digest1);
                     }
                     if (touch) {
-                        this.touchRecord(writePolicy1, client1, namespace, setName, digest1);
+                        this.touchRecord(client1, namespace, setName, digest1);
                     }
                 }
                 else if (digest2 != null && !digest2.trim().isEmpty()) {
                     if (read) {
-                        this.readRecord(writePolicy2, client2, namespace, setName, digest2);
+                        this.readRecord(client2, namespace, setName, digest2);
                     }
                     if (touch) {
-                        this.touchRecord(writePolicy2, client2, namespace, setName, digest2);
+                        this.touchRecord(client2, namespace, setName, digest2);
                     }
                 }
             }
@@ -582,8 +580,8 @@ public class ClusterComparator {
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());
         }
-        IAerospikeClient client1 = this.connectClient(Side.SIDE_1);
-        IAerospikeClient client2 = this.connectClient(Side.SIDE_2);
+        AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
+        AerospikeClientAccess client2 = this.connectClient(Side.SIDE_2);
         Scanner input = null;
         try {
             if (options.getAction() == Action.TOUCH) {

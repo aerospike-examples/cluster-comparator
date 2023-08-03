@@ -5,9 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.aerospike.client.IAerospikeClient;
-import com.aerospike.client.Info;
-import com.aerospike.client.cluster.Node;
+import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
 
 public class PartitionMap {
     private static final int NUMBER_OF_PARTITIONS = 4096;
@@ -15,11 +13,10 @@ public class PartitionMap {
     private final Map<String, List<PartitionData>> namespaceToPartitions = new HashMap<>();
     private final Map<String, Boolean> complete = new HashMap<>();
     
-    public PartitionMap(IAerospikeClient client) {
-        
-        Node[] nodes = client.getNodes();
-        for (Node node : nodes) {
-            String result = Info.request(node, "partition-info");
+    public PartitionMap(AerospikeClientAccess client) {
+        Map<String, String> nodeToInfo = client.invokeInfoCommandOnAllNodes("partition-info");
+        for (String nodeName : nodeToInfo.keySet()) {
+            String result = nodeToInfo.get(nodeName);
             String[] lines = result.split(";" );
             boolean first = true;
             for (String line: lines) {
@@ -38,7 +35,7 @@ public class PartitionMap {
                     }
                     namespaceToPartitions.put(namespace, partData);
                 }
-                if (node.getName().equals(data.getWokingMaster())) {
+                if (nodeName.equals(data.getWokingMaster())) {
                     namespaceToPartitions.get(namespace).set(data.getPartitionId(), data);
                 }
             }

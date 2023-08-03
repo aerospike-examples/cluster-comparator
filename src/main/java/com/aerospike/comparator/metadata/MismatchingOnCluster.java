@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.aerospike.client.cluster.Node;
 import com.aerospike.comparator.Side;
 
 public class MismatchingOnCluster {
@@ -16,12 +15,12 @@ public class MismatchingOnCluster {
         this.name = name;
     }
     
-    public MismatchingOnCluster addMismatchingValues(final List<Map<String, String>> contextValues, final Node[] nodes, Side side) {
-        if (nodes.length != contextValues.size()) {
-            throw new IllegalArgumentException(String.format("Expecting node count (%d) to match the number of contexts (%d)", nodes.length, contextValues.size()));
+    public MismatchingOnCluster addMismatchingValues(final List<Map<String, String>> contextValues, final List<String> nodeNames, Side side) {
+        if (nodeNames.size() != contextValues.size()) {
+            throw new IllegalArgumentException(String.format("Expecting node count (%d) to match the number of contexts (%d)", nodeNames.size(), contextValues.size()));
         }
-        for (int i = 0; i < nodes.length; i++) {
-            this.values.put(nodes[i].getName(), contextValues.get(i).get(name));
+        for (int i = 0; i < nodeNames.size(); i++) {
+            this.values.put(nodeNames.get(i), contextValues.get(i).get(name));
         }
         this.side = side;
         return this;
