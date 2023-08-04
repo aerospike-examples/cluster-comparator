@@ -265,18 +265,6 @@ public class InfoParserMatrix {
         return objects;
     }
     
-    /*
-    public <T> List<List<T>> invokeCommandOnAllNodes(IAerospikeClient client, String command, Class<T> clazz, NameFinder nameFinder) {
-        NamedMatrix<Map<String, String>> results = this.invokeCommandReturningObjectListOnAllNodes(client, command, false, nameFinder);
-        NamedMatrix<T> results = new NamedMatrix<>();
-
-        parseOb
-        for (List<Map<String, String>> thisResult : results) {
-            objectList.add(parseObjectListStringsToObjectList(thisResult, clazz));
-        }
-        return objectList;
-    }
-    */
     public <T> List<T> invokeCommand(AerospikeClientAccess client, String command, Class<T> clazz) {
         List<Map<String, String>> results = this.invokeCommandReturningObjectList(client, command, false);
         return parseObjectListStringsToObjectList(results, clazz);

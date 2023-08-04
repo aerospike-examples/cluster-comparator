@@ -81,6 +81,7 @@ public class ClusterComparatorOptions {
     private PathOptions pathOptions = null; 
     private long recordCompareLimit;
     private boolean metadataCompare = false;
+    private int remoteServerPort = -1;
     
     private static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -396,6 +397,10 @@ public class ClusterComparatorOptions {
                 + "compare list paths order insensitive.");
         options.addOption("rl", "recordLimit", true, "The maximum number of records to compare. Specify 0 for unlimited records (default)");
         options.addOption("m", "metadataCompare", false, "Perform a meta-data comparison between the 2 clusters");
+        options.addOption("rs", "remoteServer", true, "This comparator instance is to be used as a remote server. That is, its operations will be controlled by another "
+                + "comparator instance, and they will communicate over a socket. Note that in this mode, only host 1 is connected, any parameters associated with host 2 "
+                + "will be silently ignored. This is useful when there is no single node which can see both clusters due to firewalls, NAT restrictions etc. To connect to "
+                + "this remoteServer from the main comparator specify a host address of 'remote:<this_host_ip>:<port>. The port is specified as a parameter to this argument.");
         
         return options;
     }
@@ -412,47 +417,57 @@ public class ClusterComparatorOptions {
     
     private void validate(Options options) {
         boolean valid = false;
-        if (this.threads < 0) {
-            System.out.println("threads must be >= 0, not " + this.threads);
-        }
-        else if (this.startPartition < 0 || this.startPartition >= 4096) {
-            System.out.println("startPartition must be >= 0 and < 4096, not " + this.startPartition);
-        }
-        else if (this.endPartition < 0 || this.endPartition > 4096) {
-            System.out.println("endPartition must be >= 0 and <= 4096, not " + this.endPartition);
-        }
-        else if (this.endPartition <= this.startPartition) {
-            System.out.println("endPartition must be > startPartition " + this.endPartition);
-        }
-        else if (this.namespaces == null || this.namespaces.length == 0) {
-            System.out.println("namespace(s) must be specified");
-        }
-        else if ((this.action == Action.SCAN_ASK || this.action == Action.TOUCH || this.action == Action.READ) && this.fileName == null) {
-            System.out.println("If action is not 'scan' or 'scan_touch' or 'scan_read', the fileName must also be specified");
-        }
-        else if (this.rps < 0) {
-            System.out.println("RPS must be >= 0, not " + this.rps);
-        }
-        else if (this.hosts1 == null) {
-            System.out.println("host1 must be specified to give connection details to the first cluster");
-        }
-        else if (this.hosts2 == null) {
-            System.out.println("host1 must be specified to give connection details to the second cluster");
-        }
-        else if (this.missingRecordsLimit < 0) {
-            System.out.println("Records limit must be >= 0, not " + this.missingRecordsLimit);
-        }
-        else if (this.isQuickCompare() && this.setNames != null) {
-            System.out.println("Quick compare cannot be used in conjunction with sets, it can only be used with namespace comparisons.");
-        }
-        else if (this.endDate != null && this.beginDate != null && this.beginDate.compareTo(this.endDate) > 0) {
-            System.out.println("Start date (" + this.dateFormat.format(beginDate) + ") must be before the end date (" + this.dateFormat.format(endDate) + ")");
-        }
-        else if ((this.endDate != null || this.beginDate != null) && this.isQuickCompare()) {
-            System.out.println("Date ranges for the scans cannot be used with quick compare");
+        if (this.isRemoteServer()) {
+            if (this.hosts1 == null) {
+                System.out.println("host1 must be specified to give connection details to the first cluster");
+            }
+            else {
+                valid = true;
+            }
         }
         else {
-            valid = true;
+            if (this.threads < 0) {
+                System.out.println("threads must be >= 0, not " + this.threads);
+            }
+            else if (this.startPartition < 0 || this.startPartition >= 4096) {
+                System.out.println("startPartition must be >= 0 and < 4096, not " + this.startPartition);
+            }
+            else if (this.endPartition < 0 || this.endPartition > 4096) {
+                System.out.println("endPartition must be >= 0 and <= 4096, not " + this.endPartition);
+            }
+            else if (this.endPartition <= this.startPartition) {
+                System.out.println("endPartition must be > startPartition " + this.endPartition);
+            }
+            else if (this.namespaces == null || this.namespaces.length == 0) {
+                System.out.println("namespace(s) must be specified");
+            }
+            else if ((this.action == Action.SCAN_ASK || this.action == Action.TOUCH || this.action == Action.READ) && this.fileName == null) {
+                System.out.println("If action is not 'scan' or 'scan_touch' or 'scan_read', the fileName must also be specified");
+            }
+            else if (this.rps < 0) {
+                System.out.println("RPS must be >= 0, not " + this.rps);
+            }
+            else if (this.hosts1 == null) {
+                System.out.println("host1 must be specified to give connection details to the first cluster");
+            }
+            else if (this.hosts2 == null) {
+                System.out.println("host1 must be specified to give connection details to the second cluster");
+            }
+            else if (this.missingRecordsLimit < 0) {
+                System.out.println("Records limit must be >= 0, not " + this.missingRecordsLimit);
+            }
+            else if (this.isQuickCompare() && this.setNames != null) {
+                System.out.println("Quick compare cannot be used in conjunction with sets, it can only be used with namespace comparisons.");
+            }
+            else if (this.endDate != null && this.beginDate != null && this.beginDate.compareTo(this.endDate) > 0) {
+                System.out.println("Start date (" + this.dateFormat.format(beginDate) + ") must be before the end date (" + this.dateFormat.format(endDate) + ")");
+            }
+            else if ((this.endDate != null || this.beginDate != null) && this.isQuickCompare()) {
+                System.out.println("Date ranges for the scans cannot be used with quick compare");
+            }
+            else {
+                valid = true;
+            }
         }
         if (!valid) {
             usage(options);
@@ -529,6 +544,7 @@ public class ClusterComparatorOptions {
         if (cl.hasOption("metadataCompare")) {
             this.metadataCompare = true;
         }
+        this.remoteServerPort = Integer.valueOf(cl.getOptionValue("remoteServer", "-1"));
         this.validate(options);
     }
 
@@ -669,6 +685,14 @@ public class ClusterComparatorOptions {
     
     public boolean isServicesAlternate2() {
         return servicesAlternate2;
+    }
+    
+    public boolean isRemoteServer() {
+        return this.remoteServerPort > 0;
+    }
+    
+    public int getRemoteServerPort() {
+        return remoteServerPort;
     }
 }
 

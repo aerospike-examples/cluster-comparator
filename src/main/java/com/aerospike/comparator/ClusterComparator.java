@@ -29,13 +29,14 @@ import com.aerospike.client.policy.ClientPolicy;
 import com.aerospike.client.policy.QueryPolicy;
 import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.query.PartitionFilter;
-import com.aerospike.client.query.RecordSet;
 import com.aerospike.client.query.Statement;
 import com.aerospike.comparator.ClusterComparatorOptions.Action;
 import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
 import com.aerospike.comparator.dbaccess.LocalAerospikeClient;
 import com.aerospike.comparator.dbaccess.RecordSetAccess;
+import com.aerospike.comparator.dbaccess.RemoteAerospikeClient;
+import com.aerospike.comparator.dbaccess.RemoteServer;
 
 public class ClusterComparator {
 
@@ -134,23 +135,44 @@ public class ClusterComparator {
         clientPolicy.authMode = (side == Side.SIDE_1) ? options.getAuthMode1() : options.getAuthMode2();
         clientPolicy.clusterName = (side == Side.SIDE_1) ? options.getClusterName1() : options.getClusterName2();
         clientPolicy.useServicesAlternate = (side == Side.SIDE_1) ? options.isServicesAlternate1() : options.isServicesAlternate2();
-        Host[] hosts = (side == Side.SIDE_1) ? Host.parseHosts(options.getHosts1(), 3000) : Host.parseHosts(options.getHosts2(), 3000);
-        
-        if (clientPolicy.user != null && clientPolicy.password == null) {
-            java.io.Console console = System.console();
-            if (console != null) {
-                char[] pass = console.readPassword("Enter password for cluster " + ((side == Side.SIDE_1) ? "1" : "2") +  ": ");
-                if (pass != null) {
-                    clientPolicy.password = new String(pass);
-                }
+        String hostNames = (side == Side.SIDE_1) ? options.getHosts1() : options.getHosts2();
+        if (hostNames.startsWith("remote:")) {
+            // Ignore any addresses after the first
+            int index = hostNames.indexOf(',');
+            if (index > 0) {
+                hostNames = hostNames.substring(0, index);
+            }
+            String[] remoteHost = hostNames.split(":");
+            if (remoteHost.length != 3) {
+                System.out.printf("If using a remote server, the address must be specified in the format: 'remote:<host_ip>:<port>', but received '%s'\n", hostNames);
+                System.exit(-1);
+            }
+            try {
+                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse);
+            }
+            catch (IOException ioe) {
+                throw new AerospikeException(ioe);
             }
         }
-        if (!options.isSilent()) {
-            System.out.printf("Cluster %d: name: %s, hosts: %s user: %s, password: %s\n", side.value, 
-                    clientPolicy.clusterName, Arrays.toString(hosts), clientPolicy.user, clientPolicy.password == null ? "null" : "********");
-            System.out.printf("         authMode: %s, tlsPolicy: %s\n", clientPolicy.authMode, tlsPolicyAsString(clientPolicy.tlsPolicy));
+        else {
+            Host[] hosts = Host.parseHosts(hostNames, 3000);
+            
+            if (clientPolicy.user != null && clientPolicy.password == null) {
+                java.io.Console console = System.console();
+                if (console != null) {
+                    char[] pass = console.readPassword("Enter password for cluster " + ((side == Side.SIDE_1) ? "1" : "2") +  ": ");
+                    if (pass != null) {
+                        clientPolicy.password = new String(pass);
+                    }
+                }
+            }
+            if (!options.isSilent()) {
+                System.out.printf("Cluster %d: name: %s, hosts: %s user: %s, password: %s\n", side.value, 
+                        clientPolicy.clusterName, Arrays.toString(hosts), clientPolicy.user, clientPolicy.password == null ? "null" : "********");
+                System.out.printf("         authMode: %s, tlsPolicy: %s\n", clientPolicy.authMode, tlsPolicyAsString(clientPolicy.tlsPolicy));
+            }
+            return new LocalAerospikeClient(new AerospikeClient(clientPolicy, hosts));
         }
-        return new LocalAerospikeClient(new AerospikeClient(clientPolicy, hosts));
     }
 
     private List<Integer> quickCompare(AerospikeClientAccess client1, AerospikeClientAccess client2, String namespace) {
@@ -412,7 +434,6 @@ public class ClusterComparator {
     }
     
     private void beginComparisons(AerospikeClientAccess client1, AerospikeClientAccess client2) throws InterruptedException {
-        this.threadsToUse = options.getThreads() <= 0 ? Runtime.getRuntime().availableProcessors() : options.getThreads();
         this.filterExpresion = formFilterExpression();
 
         if (options.isMetadataCompare()) {
@@ -571,7 +592,22 @@ public class ClusterComparator {
         
     }
     
+    private void startRemoteServer() {
+        AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
+        RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort());
+        try {
+            remoteServer.start();
+        } catch (IOException e) {
+            System.err.printf("IOException occurred in remote server mode, terminating server. %s\n", e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
     public DifferenceSummary begin() throws Exception {
+        if (options.isRemoteServer()) {
+            startRemoteServer();
+            return null;
+        }
         if (!options.isSilent()) {
             System.out.printf("Beginning scan with namespaces '%s', sets '%s', start partition: %d, end partition %d\n", 
                     String.join(",", this.options.getNamespaces()),
@@ -580,8 +616,12 @@ public class ClusterComparator {
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());
         }
+        this.threadsToUse = options.getThreads() <= 0 ? Runtime.getRuntime().availableProcessors() : options.getThreads();
         AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
         AerospikeClientAccess client2 = this.connectClient(Side.SIDE_2);
+//    System.out.println(client1.getNodeNames());
+//    System.out.println(client2.getNodeNames());
+//    System.exit(0);
         Scanner input = null;
         try {
             if (options.getAction() == Action.TOUCH) {
