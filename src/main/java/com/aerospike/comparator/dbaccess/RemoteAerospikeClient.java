@@ -44,15 +44,41 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
     @Override
     public void touch(WritePolicy policy, Key key) {
         Connection conn = null;
-        // TODO Auto-generated method stub
-        
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_TOUCH);
+            RemoteUtils.sendPolicy(policy, conn.getDos());
+            RemoteUtils.sendKey(key, conn.getDos());
+            conn.getDis().readInt();
+        }
+        catch (IOException ioe) {
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
+        }
     }
 
     @Override
     public Record get(Policy policy, Key key) {
         Connection conn = null;
-        // TODO Auto-generated method stub
-        return null;
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_GET);
+            RemoteUtils.sendPolicy(policy, conn.getDos());
+            RemoteUtils.sendKey(key, conn.getDos());
+            return RemoteUtils.readRecord(conn.getDis());
+        }
+        catch (IOException ioe) {
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
+        }
     }
 
     @Override

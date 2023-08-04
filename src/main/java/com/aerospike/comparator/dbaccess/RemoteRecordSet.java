@@ -1,9 +1,6 @@
 package com.aerospike.comparator.dbaccess;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.util.Map;
 
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Key;
@@ -49,24 +46,7 @@ public class RemoteRecordSet implements RecordSetAccess {
     public Record getRecord() {
         try {
             connection.getDos().write(RemoteServer.CMD_RS_RECORD);
-            boolean exists = connection.getDis().readBoolean();
-            if (exists) {
-                int expiration = connection.getDis().readInt();
-                int generation = connection.getDis().readInt();
-                int length = connection.getDis().readInt();
-                byte[] bytes = connection.getDis().readNBytes(length);
-                try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
-                        ObjectInputStream ois = new ObjectInputStream(bis)) {
-                    Map<String, Object> map = (Map<String, Object>) ois.readObject();
-                    return new Record(map, generation, expiration);
-                }
-                catch (ClassNotFoundException cnfe) {
-                    throw new AerospikeException(cnfe);
-                }
-            }
-            else {
-                return null;
-            }
+            return RemoteUtils.readRecord(connection.getDis());
         }
         catch (IOException ioe) {
             throw new AerospikeException(ioe);

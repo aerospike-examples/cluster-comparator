@@ -14,6 +14,7 @@ import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.exp.Expression;
 import com.aerospike.client.policy.QueryPolicy;
+import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
 
@@ -114,23 +115,7 @@ public class RemoteServer {
                  
                 case CMD_RS_RECORD:
                     Record record = recordsSet.getRecord();
-                    if (record == null) {
-                        dos.writeBoolean(false);
-                    }
-                    else {
-                        dos.writeBoolean(true);
-                        dos.writeInt(record.expiration);
-                        dos.writeInt(record.generation);
-                        Map<String, Object> map = record.bins;
-                        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                                ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-                            oos.writeObject(map);
-                            bos.flush();
-                            byte[] bytes = bos.toByteArray();
-                            dos.writeInt(bytes.length);
-                            dos.write(bytes);
-                        }
-                    }
+                    RemoteUtils.sendRecord(record, dos);
                     break;
                     
                 case CMD_RS_CLOSE:
@@ -139,6 +124,22 @@ public class RemoteServer {
                     dos.writeInt(0);
                 }
             }
+        }
+        
+        private void doTouch() throws IOException {
+            WritePolicy policy = new WritePolicy();
+            policy = (WritePolicy) RemoteUtils.readPolicy(policy, dis);
+            Key key = RemoteUtils.readKey(dis);
+            client.touch(policy, key);
+            dos.writeInt(0);
+        }
+        
+        private void doGet() throws IOException {
+            WritePolicy policy = new WritePolicy();
+            policy = (WritePolicy) RemoteUtils.readPolicy(policy, dis);
+            Key key = RemoteUtils.readKey(dis);
+            Record record = client.get(policy, key);
+            RemoteUtils.sendRecord(record, dos);
         }
         
         private void doInvokeInfoCmdOnAllNodes() throws IOException {
@@ -177,9 +178,13 @@ public class RemoteServer {
                         break;
                         
                     case CMD_TOUCH:
-                    case CMD_GET:
-                        // TODO
+                        doTouch();
                         break;
+                        
+                    case CMD_GET:
+                        doGet();
+                        break;
+                        
                     case CMD_QUERY_PARTITION:
                         doQueryPartition();
                         break;
