@@ -148,7 +148,11 @@ public class ClusterComparator {
                 System.exit(-1);
             }
             try {
-                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse);
+                if (!options.isSilent()) {
+                    System.out.printf("Remote cluster %d: hosts: %s tlsPolicy: %s\n", 
+                            side.value, hostNames, tlsPolicyAsString(clientPolicy.tlsPolicy));
+                }
+                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, clientPolicy.tlsPolicy);
             }
             catch (IOException ioe) {
                 throw new AerospikeException(ioe);
@@ -596,7 +600,7 @@ public class ClusterComparator {
         AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
         RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort());
         try {
-            remoteServer.start();
+            remoteServer.start(options.getRemoteServerTls());
         } catch (IOException e) {
             System.err.printf("IOException occurred in remote server mode, terminating server. %s\n", e.getMessage());
             e.printStackTrace();

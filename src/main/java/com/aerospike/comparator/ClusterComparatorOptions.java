@@ -82,6 +82,7 @@ public class ClusterComparatorOptions {
     private long recordCompareLimit;
     private boolean metadataCompare = false;
     private int remoteServerPort = -1;
+    private TlsPolicy remoteServerTls = null;
     
     private static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -190,7 +191,7 @@ public class ClusterComparatorOptions {
         }
     }
     
-    private SSLContext parseTlsContext(String tlsContext) {
+    private SSLFactory parseTlsContext(String tlsContext) {
         String certChain = null;
         String privateKey = null;
         String caCertChain = null;
@@ -249,7 +250,7 @@ public class ClusterComparatorOptions {
                     .withIdentityMaterial(keyManager)
                     .withTrustMaterial(trustManager)
                     .build();
-            return sslFactory.getSslContext();
+            return sslFactory;
         }
         finally {
             if (certFile != null) {
@@ -285,7 +286,7 @@ public class ClusterComparatorOptions {
             tlsPolicy.forLoginOnly = Boolean.parseBoolean(value);
             break;
         case "context":
-            tlsPolicy.context = parseTlsContext(value);
+            tlsPolicy.context = parseTlsContext(value).getSslContext();
             break;
         default: 
             throw new ParseException("Unexpected key '" + key + "' in TLS policy. Valid keys are: 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'");
@@ -400,7 +401,9 @@ public class ClusterComparatorOptions {
         options.addOption("rs", "remoteServer", true, "This comparator instance is to be used as a remote server. That is, its operations will be controlled by another "
                 + "comparator instance, and they will communicate over a socket. Note that in this mode, only host 1 is connected, any parameters associated with host 2 "
                 + "will be silently ignored. This is useful when there is no single node which can see both clusters due to firewalls, NAT restrictions etc. To connect to "
-                + "this remoteServer from the main comparator specify a host address of 'remote:<this_host_ip>:<port>. The port is specified as a parameter to this argument.");
+                + "this remoteServer from the main comparator specify a host address of 'remote:<this_host_ip>:<port>. The port is specified as a parameter to this argument. "
+                + "If using TLS, the -remoteServerTls parameter is also required for the server to get the appropriate certificates (only the 'context' part is used).");
+        options.addOption("rst", "remoteServerTls", true, "TLS options for the remote server. Use the same format as -tls1, but only the context is needed");
         
         return options;
     }
@@ -545,6 +548,7 @@ public class ClusterComparatorOptions {
             this.metadataCompare = true;
         }
         this.remoteServerPort = Integer.valueOf(cl.getOptionValue("remoteServer", "-1"));
+        this.remoteServerTls = parseTlsPolicy(cl.getOptionValue("remoteServerTls"));
         this.validate(options);
     }
 
@@ -693,6 +697,10 @@ public class ClusterComparatorOptions {
     
     public int getRemoteServerPort() {
         return remoteServerPort;
+    }
+    
+    public TlsPolicy getRemoteServerTls() {
+        return remoteServerTls;
     }
 }
 

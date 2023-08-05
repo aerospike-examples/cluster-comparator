@@ -5,24 +5,27 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.aerospike.client.AerospikeException;
+import com.aerospike.client.policy.TlsPolicy;
 
 class ConnectionPool {
     private final List<Connection> available = new ArrayList<>();
     private final List<Connection> inUse = new ArrayList<>();
     private final String host;
     private final int port;
+    private final TlsPolicy tlsPolicy;
     private volatile boolean closed = false;
     
-    public ConnectionPool(String host, int port, int defaultSize) throws IOException {
+    public ConnectionPool(String host, int port, int defaultSize, TlsPolicy tlsPolicy) throws IOException {
         this.host = host;
         this.port = port;
+        this.tlsPolicy = tlsPolicy;
         for (int i = 0; i < defaultSize; i++) {
             Connection connection = establish();
             available.add(connection);
         }
     }
     private Connection establish() throws IOException {
-        return new Connection(host, port);
+        return new Connection(host, port, tlsPolicy);
     }
     
     public synchronized Connection borrow() throws IOException {

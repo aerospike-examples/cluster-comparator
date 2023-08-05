@@ -11,6 +11,7 @@ import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.QueryPolicy;
+import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
@@ -18,8 +19,8 @@ import com.aerospike.client.query.Statement;
 public class RemoteAerospikeClient implements AerospikeClientAccess {
 
     private final ConnectionPool pool;
-    public RemoteAerospikeClient(String host, int port, int defaultPoolSize) throws IOException {
-        this.pool = new ConnectionPool(host, port, defaultPoolSize);
+    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, TlsPolicy tlsPolicy) throws IOException {
+        this.pool = new ConnectionPool(host, port, defaultPoolSize, tlsPolicy);
     }
     
     @Override

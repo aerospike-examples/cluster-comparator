@@ -1,19 +1,19 @@
 package com.aerospike.comparator.dbaccess;
 
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
 import java.util.Map;
 
+import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.exp.Expression;
 import com.aerospike.client.policy.QueryPolicy;
+import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
@@ -39,8 +39,18 @@ public class RemoteServer {
         this.port = port;
     }
     
-    public void start() throws IOException {
-        ServerSocket socketServer = new ServerSocket(port);
+    public void start(TlsPolicy policy) throws IOException {
+        ServerSocket socketServer;
+        if (policy != null) {
+            if (policy.context == null) {
+                throw new AerospikeException("Remote Server has a TLS Policy specified but it has no SSL context on it.");
+            }
+            socketServer = policy.context.getServerSocketFactory().createServerSocket(port);
+            System.out.printf("Starting remote server with TLS configuration: %s\n", socketServer);
+        }
+        else {
+            socketServer = new ServerSocket(port);
+        }
         System.out.printf("Comparator remote server listening on port %d\n", port);
         while (true) {
             Socket socket = null;
