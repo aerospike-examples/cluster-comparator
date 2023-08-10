@@ -59,5 +59,4 @@ class ConnectionPool {
         }
         this.available.clear();
     }
-    
 }

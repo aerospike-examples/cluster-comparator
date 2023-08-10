@@ -152,7 +152,7 @@ public class ClusterComparator {
                     System.out.printf("Remote cluster %d: hosts: %s tlsPolicy: %s\n", 
                             side.value, hostNames, tlsPolicyAsString(clientPolicy.tlsPolicy));
                 }
-                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, clientPolicy.tlsPolicy);
+                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, options.getRemoteCacheSize(), clientPolicy.tlsPolicy);
             }
             catch (IOException ioe) {
                 throw new AerospikeException(ioe);

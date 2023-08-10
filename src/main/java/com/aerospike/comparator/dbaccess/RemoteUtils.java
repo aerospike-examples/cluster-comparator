@@ -102,6 +102,9 @@ public class RemoteUtils {
         else {
             return null;
         }
-
+    }
+    
+    public static void handleIOException(IOException ioe) {
+        ioe.printStackTrace();
     }
 }

@@ -19,8 +19,10 @@ import com.aerospike.client.query.Statement;
 public class RemoteAerospikeClient implements AerospikeClientAccess {
 
     private final ConnectionPool pool;
-    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, TlsPolicy tlsPolicy) throws IOException {
+    private final int cacheSize;
+    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, int cacheSize, TlsPolicy tlsPolicy) throws IOException {
         this.pool = new ConnectionPool(host, port, defaultPoolSize, tlsPolicy);
+        this.cacheSize = cacheSize;
     }
     
     @Override
@@ -53,6 +55,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDis().readInt();
         }
         catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
         finally {
@@ -73,6 +76,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return RemoteUtils.readRecord(conn.getDis());
         }
         catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
         finally {
@@ -106,9 +110,10 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDos().writeInt(filter.getCount());
             conn.getDis().readUTF();    // Getting this back means the server is ready.
             // We keep hold of this connection until the recordset is closed, which simplifies the back-and-forth
-            return new RemoteRecordSet(pool, conn);
+            return new RemoteRecordSet(pool, conn, this.cacheSize);
         }
         catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
     }
@@ -130,6 +135,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return result;
         }
         catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
         finally {
@@ -149,6 +155,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return conn.getDis().readUTF();
         }
         catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
         finally {
@@ -172,6 +179,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return result;
         }
         catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
         finally {

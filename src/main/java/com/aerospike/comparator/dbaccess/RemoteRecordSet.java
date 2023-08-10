@@ -9,15 +9,25 @@ import com.aerospike.client.Record;
 public class RemoteRecordSet implements RecordSetAccess {
     private final ConnectionPool pool;
     private final Connection connection;
+    private final CachedRecordSet cachedRecordSet;
     
-    public RemoteRecordSet(ConnectionPool pool, Connection connection) {
+    public RemoteRecordSet(ConnectionPool pool, Connection connection, int cacheSize) {
         super();
         this.pool = pool;
         this.connection = connection;
+        if (cacheSize >= 4) {
+            this.cachedRecordSet = new CachedRecordSet(cacheSize, connection);
+        }
+        else {
+            this.cachedRecordSet = null;
+        }
     }
 
     @Override
     public boolean next() {
+        if (cachedRecordSet != null) {
+            return cachedRecordSet.next();
+        }
         try {
             connection.getDos().write(RemoteServer.CMD_RS_NEXT);
             return connection.getDis().readBoolean();
@@ -29,13 +39,12 @@ public class RemoteRecordSet implements RecordSetAccess {
 
     @Override
     public Key getKey() {
+        if (cachedRecordSet != null) {
+            return cachedRecordSet.getKey();
+        }
         try {
             connection.getDos().write(RemoteServer.CMD_RS_KEY);
-            String namespace = connection.getDis().readUTF();
-            String setName = connection.getDis().readUTF();
-            int length = connection.getDis().readInt();
-            byte[] digest = connection.getDis().readNBytes(length);
-            return new Key(namespace, digest, setName, null);
+            return RemoteUtils.readKey(connection.getDis());
         }
         catch (IOException ioe) {
             throw new AerospikeException(ioe);
@@ -44,6 +53,9 @@ public class RemoteRecordSet implements RecordSetAccess {
 
     @Override
     public Record getRecord() {
+        if (cachedRecordSet != null) {
+            return cachedRecordSet.getRecord();
+        }
         try {
             connection.getDos().write(RemoteServer.CMD_RS_RECORD);
             return RemoteUtils.readRecord(connection.getDis());
@@ -56,12 +68,20 @@ public class RemoteRecordSet implements RecordSetAccess {
     @Override
     public void close() {
         try {
-            connection.getDos().write(RemoteServer.CMD_RS_CLOSE);
-            connection.getDis().readInt();
-            pool.release(connection);
+            if (cachedRecordSet != null) {
+                cachedRecordSet.close();
+            }
+            else {
+                connection.getDos().write(RemoteServer.CMD_RS_CLOSE);
+                connection.getDis().readInt();
+            }
         }
         catch (IOException ioe) {
             throw new AerospikeException(ioe);
+        }
+        finally {
+            pool.release(connection);
+            
         }
     }
 }

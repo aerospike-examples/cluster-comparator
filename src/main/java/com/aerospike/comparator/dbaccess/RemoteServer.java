@@ -30,6 +30,8 @@ public class RemoteServer {
     public static final int CMD_RS_KEY = 9;
     public static final int CMD_RS_RECORD = 10;
     public static final int CMD_RS_CLOSE = 11;
+    public static final int CMD_RS_MULTI = 12;
+    
     
     private final AerospikeClientAccess client;
     private final int port;
@@ -63,7 +65,7 @@ public class RemoteServer {
                 thread.start();
             }
             catch (IOException ioe) {
-                ioe.printStackTrace();
+                RemoteUtils.handleIOException(ioe);
                 break;
             }
         }
@@ -111,16 +113,27 @@ public class RemoteServer {
             while (!done) {
                 int command = dis.read();
                 switch (command) {
+                case CMD_RS_MULTI:
+                    int num = dis.readInt();
+                    boolean hasMore = recordsSet.next();
+                    for (int i = 0; hasMore && i < num; i++) {
+                        dos.writeBoolean(true);
+                        RemoteUtils.sendKey(recordsSet.getKey(), dos);
+                        RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
+                        hasMore = recordsSet.next();
+                    }
+                    if (!hasMore) {
+                        dos.writeBoolean(false);
+                    }
+                    break;
+                    
                 case CMD_RS_NEXT:
                     dos.writeBoolean(recordsSet.next());
                     break;
                     
                 case CMD_RS_KEY:
                     Key key = recordsSet.getKey();
-                    dos.writeUTF(key.namespace);
-                    dos.writeUTF(key.setName);
-                    dos.writeInt(key.digest.length);
-                    dos.write(key.digest);
+                    RemoteUtils.sendKey(key, dos);
                     break;
                  
                 case CMD_RS_RECORD:
@@ -212,6 +225,7 @@ public class RemoteServer {
                 }
                 catch (IOException ioe) {
                     System.out.println("IOException received, closing");
+                    RemoteUtils.handleIOException(ioe);
                     break;
                 }
             }

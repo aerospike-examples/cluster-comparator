@@ -83,6 +83,7 @@ public class ClusterComparatorOptions {
     private boolean metadataCompare = false;
     private int remoteServerPort = -1;
     private TlsPolicy remoteServerTls = null;
+    private int remoteCacheSize;
     
     private static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -404,6 +405,8 @@ public class ClusterComparatorOptions {
                 + "this remoteServer from the main comparator specify a host address of 'remote:<this_host_ip>:<port>. The port is specified as a parameter to this argument. "
                 + "If using TLS, the -remoteServerTls parameter is also required for the server to get the appropriate certificates (only the 'context' part is used).");
         options.addOption("rst", "remoteServerTls", true, "TLS options for the remote server. Use the same format as -tls1, but only the context is needed");
+        options.addOption("rcs", "remoteCacheSize", true, "When using a remote cache, set a buffer size to more efficiently transfer records from the "
+                + "remote server to this comparator. Note this parameter only has an effect if >= 4");
         
         return options;
     }
@@ -549,6 +552,7 @@ public class ClusterComparatorOptions {
         }
         this.remoteServerPort = Integer.valueOf(cl.getOptionValue("remoteServer", "-1"));
         this.remoteServerTls = parseTlsPolicy(cl.getOptionValue("remoteServerTls"));
+        this.remoteCacheSize = Integer.valueOf(cl.getOptionValue("remoteCacheSize", "0"));
         this.validate(options);
     }
 
@@ -701,6 +705,10 @@ public class ClusterComparatorOptions {
     
     public TlsPolicy getRemoteServerTls() {
         return remoteServerTls;
+    }
+    
+    public int getRemoteCacheSize() {
+        return remoteCacheSize;
     }
 }
 
