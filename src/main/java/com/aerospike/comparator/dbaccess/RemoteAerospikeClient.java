@@ -1,6 +1,7 @@
 package com.aerospike.comparator.dbaccess;
 
 import java.io.IOException;
+import java.security.cert.CertificateParsingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

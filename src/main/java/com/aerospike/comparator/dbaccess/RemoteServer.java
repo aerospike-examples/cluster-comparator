@@ -8,6 +8,10 @@ import java.net.Socket;
 import java.util.List;
 import java.util.Map;
 
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLSocket;
+
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
@@ -41,14 +45,48 @@ public class RemoteServer {
         this.port = port;
     }
     
+    private String join(String[] strings) {
+        if (strings == null) {
+            return null;
+        }
+        return String.join(",\n\t\t", strings);
+    }
+    
+    private String dumpSocketDetails(Socket socket) {
+        if (socket instanceof SSLSocket) {
+            SSLSocket sslSocket = (SSLSocket)socket;
+            return String.format("SSLSocket[hostname=%s, port=%d, Session(cipher=%s, protocol=%s)", 
+                    sslSocket.getInetAddress().getHostAddress(),
+                    sslSocket.getLocalPort(),
+                    sslSocket.getSession().getCipherSuite(),
+                    sslSocket.getSession().getProtocol());
+        }
+        else {
+            return socket.toString();
+        }
+    }
     public void start(TlsPolicy policy) throws IOException {
         ServerSocket socketServer;
         if (policy != null) {
             if (policy.context == null) {
                 throw new AerospikeException("Remote Server has a TLS Policy specified but it has no SSL context on it.");
             }
-            socketServer = policy.context.getServerSocketFactory().createServerSocket(port);
+            SSLServerSocket sslSocket = (SSLServerSocket)policy.context.getServerSocketFactory().createServerSocket(port);
+            sslSocket.setUseClientMode(false);
+            if (policy.ciphers != null) {
+                sslSocket.setEnabledCipherSuites(policy.ciphers);
+            }
+            if (policy.protocols != null) {
+                sslSocket.setEnabledProtocols(policy.protocols);
+            }
+            socketServer = sslSocket;
             System.out.printf("Starting remote server with TLS configuration: %s\n", socketServer);
+            SSLParameters params = sslSocket.getSSLParameters();
+            System.out.printf("\tEndpoint identification algorithm: %s\n", params.getEndpointIdentificationAlgorithm());
+            System.out.printf("\tApplication Protocols: %s\n", join(params.getApplicationProtocols()));
+            System.out.printf("\tCipher Suites: %s\n", join(params.getCipherSuites()));
+            System.out.printf("\tProtocols: %s\n", join(params.getProtocols()));
+            System.out.printf("\tNeeds Client Auth: %s\n", params.getNeedClientAuth());
         }
         else {
             socketServer = new ServerSocket(port);
@@ -58,7 +96,7 @@ public class RemoteServer {
             Socket socket = null;
             try {
                 socket = socketServer.accept();
-                System.out.printf("New client connection established: %s\n", socket);
+                System.out.printf("New client connection established: %s\n", dumpSocketDetails(socket));
                 
                 SocketHandler handler = new SocketHandler(socket, client);
                 Thread thread = new Thread(handler);

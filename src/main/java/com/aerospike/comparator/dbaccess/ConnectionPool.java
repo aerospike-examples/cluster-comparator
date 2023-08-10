@@ -1,6 +1,7 @@
 package com.aerospike.comparator.dbaccess;
 
 import java.io.IOException;
+import java.security.cert.CertificateParsingException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,7 +26,13 @@ class ConnectionPool {
         }
     }
     private Connection establish() throws IOException {
-        return new Connection(host, port, tlsPolicy);
+        try {
+            return new Connection(host, port, tlsPolicy);
+        }
+        catch (CertificateParsingException cpe) {
+            cpe.printStackTrace();
+            throw new AerospikeException(cpe);
+        }
     }
     
     public synchronized Connection borrow() throws IOException {
