@@ -598,7 +598,7 @@ public class ClusterComparator {
     
     private void startRemoteServer() {
         AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
-        RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort());
+        RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort(), options.getRemoteServerHeartbeatPort());
         try {
             remoteServer.start(options.getRemoteServerTls());
         } catch (IOException e) {

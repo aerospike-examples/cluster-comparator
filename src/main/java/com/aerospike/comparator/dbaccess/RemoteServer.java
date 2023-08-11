@@ -40,9 +40,54 @@ public class RemoteServer {
     private final AerospikeClientAccess client;
     private final int port;
     
-    public RemoteServer(AerospikeClientAccess client, int port) {
+    public RemoteServer(final AerospikeClientAccess client, final int port, final int heartbeatPort) {
         this.client = client;
         this.port = port;
+        if (heartbeatPort > 0) {
+            Thread heartbeatThread = new Thread(() -> {
+                ServerSocket serverSocket = null;
+                try {
+                    serverSocket = new ServerSocket(heartbeatPort);
+                    System.out.printf("Server heartbeat listening on port %d\n", heartbeatPort);
+                }
+                catch (IOException ioe) {
+                    System.err.printf("Error creating heartbeat socket on port %d\n", heartbeatPort);
+                }
+                while (true) {
+                    Socket socket = null;
+                    DataInputStream dis = null;
+                    DataOutputStream dos = null;
+                    try {
+                        socket = serverSocket.accept();
+                        dis = new DataInputStream(socket.getInputStream());
+                        dos = new DataOutputStream(socket.getOutputStream());
+                        while (true) {
+                            byte b = dis.readByte();
+                            dos.writeByte(b);
+                        }
+                    }
+                    catch (IOException ioe) {
+                        if (dis != null) {
+                            try {
+                                dis.close();
+                            } catch (IOException ignored) {}
+                        }
+                        if (dos != null) {
+                            try {
+                                dos.close();
+                            } catch (IOException ignored) {}
+                        }
+                        if (socket != null) {
+                            try {
+                                socket.close();
+                            } catch (IOException ignored) {}
+                        }
+                    }
+                }
+            });
+            heartbeatThread.setDaemon(true);
+            heartbeatThread.start();
+        }
     }
     
     private String join(String[] strings) {
