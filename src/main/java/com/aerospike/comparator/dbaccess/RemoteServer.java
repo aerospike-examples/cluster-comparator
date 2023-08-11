@@ -148,11 +148,12 @@ public class RemoteServer {
                 thread.start();
             }
             catch (IOException ioe) {
+                System.err.println("Error attaching to socket. Ignoring and continuing.");
                 RemoteUtils.handleIOException(ioe);
-                break;
+                
             }
         }
-        socketServer.close();
+//        socketServer.close();
     }
     
     private static class SocketHandler implements Runnable {
