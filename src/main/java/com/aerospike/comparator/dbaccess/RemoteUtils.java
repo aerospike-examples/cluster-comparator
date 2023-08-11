@@ -10,8 +10,12 @@ import java.io.ObjectOutputStream;
 import java.util.Map;
 
 import com.aerospike.client.AerospikeException;
+import com.aerospike.client.AerospikeException.InvalidNode;
+import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
+import com.aerospike.client.cluster.Cluster;
+import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.Replica;
 
@@ -106,5 +110,12 @@ public class RemoteUtils {
     
     public static void handleIOException(IOException ioe) {
         ioe.printStackTrace();
+    }
+
+    public static void handleInvalidNode(InvalidNode in, IAerospikeClient client) {
+        Cluster cluster = client.getCluster();
+        ClusterUtilities clusterUtils = new ClusterUtilities(client);
+        clusterUtils.printInfo(true);
+//        PartitionMap map = cluster.printPartitionMap();
     }
 }

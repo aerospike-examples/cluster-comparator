@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.aerospike.client.AerospikeException;
+import com.aerospike.client.AerospikeException.InvalidNode;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Info;
 import com.aerospike.client.Key;
@@ -43,8 +44,14 @@ public class LocalAerospikeClient implements AerospikeClientAccess {
 
     @Override
     public RecordSetAccess queryPartitions(QueryPolicy queryPolicy, Statement statement, PartitionFilter filter) {
-        RecordSet recordSet = this.client.queryPartitions(queryPolicy, statement, filter);
-        return new LocalRecordSet(recordSet);
+        try {
+            RecordSet recordSet = this.client.queryPartitions(queryPolicy, statement, filter);
+            return new LocalRecordSet(recordSet);
+        }
+        catch (InvalidNode in) {
+            RemoteUtils.handleInvalidNode(in, this.client);
+            throw in;
+        }
     }
 
     private Node[] getNodesAndValidate() {

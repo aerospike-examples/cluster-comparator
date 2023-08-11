@@ -19,7 +19,10 @@ import java.util.stream.IntStream;
 
 import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.AerospikeException;
+import com.aerospike.client.AerospikeException.InvalidNode;
+import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.Host;
+import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.ResultCode;
@@ -37,6 +40,7 @@ import com.aerospike.comparator.dbaccess.LocalAerospikeClient;
 import com.aerospike.comparator.dbaccess.RecordSetAccess;
 import com.aerospike.comparator.dbaccess.RemoteAerospikeClient;
 import com.aerospike.comparator.dbaccess.RemoteServer;
+import com.aerospike.comparator.dbaccess.RemoteUtils;
 
 public class ClusterComparator {
 
@@ -170,12 +174,14 @@ public class ClusterComparator {
                     }
                 }
             }
+            IAerospikeClient client = new AerospikeClient(clientPolicy, hosts);
             if (!options.isSilent()) {
                 System.out.printf("Cluster %d: name: %s, hosts: %s user: %s, password: %s\n", side.value, 
                         clientPolicy.clusterName, Arrays.toString(hosts), clientPolicy.user, clientPolicy.password == null ? "null" : "********");
                 System.out.printf("         authMode: %s, tlsPolicy: %s\n", clientPolicy.authMode, tlsPolicyAsString(clientPolicy.tlsPolicy));
+                new ClusterUtilities(client).printInfo(true, 120);
             }
-            return new LocalAerospikeClient(new AerospikeClient(clientPolicy, hosts));
+            return new LocalAerospikeClient(client);
         }
     }
 
