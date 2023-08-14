@@ -48,7 +48,6 @@ public class ClusterComparator {
     // - config file to remove certain bins from comparison of sets
     // - Protobuf'ing binary fields
     // - Or msgpack
-    // - Compare metadata -- sindex, set indexes, etc.
     // - Ability to compare different sets (scan/batch comparator) Note: how to ensure it's not just a one-way comparison?
     
     private final int startPartition;
@@ -179,7 +178,9 @@ public class ClusterComparator {
                 System.out.printf("Cluster %d: name: %s, hosts: %s user: %s, password: %s\n", side.value, 
                         clientPolicy.clusterName, Arrays.toString(hosts), clientPolicy.user, clientPolicy.password == null ? "null" : "********");
                 System.out.printf("         authMode: %s, tlsPolicy: %s\n", clientPolicy.authMode, tlsPolicyAsString(clientPolicy.tlsPolicy));
-                new ClusterUtilities(client).printInfo(true, 120);
+                if (options.isVerbose()) {
+                    new ClusterUtilities(client).printInfo(true, 120);
+                }
             }
             return new LocalAerospikeClient(client);
         }
@@ -604,7 +605,7 @@ public class ClusterComparator {
     
     private void startRemoteServer() {
         AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
-        RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort(), options.getRemoteServerHeartbeatPort());
+        RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort(), options.getRemoteServerHeartbeatPort(), options.isVerbose());
         try {
             remoteServer.start(options.getRemoteServerTls());
         } catch (IOException e) {
@@ -629,9 +630,6 @@ public class ClusterComparator {
         this.threadsToUse = options.getThreads() <= 0 ? Runtime.getRuntime().availableProcessors() : options.getThreads();
         AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
         AerospikeClientAccess client2 = this.connectClient(Side.SIDE_2);
-//    System.out.println(client1.getNodeNames());
-//    System.out.println(client2.getNodeNames());
-//    System.exit(0);
         Scanner input = null;
         try {
             if (options.getAction() == Action.TOUCH) {

@@ -7,6 +7,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.Socket;
 import java.util.Map;
 
 import com.aerospike.client.AerospikeException;
@@ -14,7 +15,6 @@ import com.aerospike.client.AerospikeException.InvalidNode;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
-import com.aerospike.client.cluster.Cluster;
 import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.Replica;
@@ -113,9 +113,17 @@ public class RemoteUtils {
     }
 
     public static void handleInvalidNode(InvalidNode in, IAerospikeClient client) {
-        Cluster cluster = client.getCluster();
         ClusterUtilities clusterUtils = new ClusterUtilities(client);
         clusterUtils.printInfo(true);
-//        PartitionMap map = cluster.printPartitionMap();
+    }
+    
+    public static void main(String[] args) throws IOException {
+        if (args.length != 2) {
+            System.err.printf("Usage: RemoteUtils <address> <port>. Sends a quick ping to the node's port over TCP/IP\n");
+            System.exit(-1);
+        }
+        Socket socket = new Socket(args[0], Integer.parseInt(args[1]));
+        socket.close();
+        System.out.printf("Ping successful to %s:%s\n", args[0], args[1]);
     }
 }

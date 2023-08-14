@@ -85,6 +85,7 @@ public class ClusterComparatorOptions {
     private int remoteServerHeartbeatPort = -1;
     private TlsPolicy remoteServerTls = null;
     private int remoteCacheSize;
+    private boolean verbose = false;
     
     private static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -410,6 +411,7 @@ public class ClusterComparatorOptions {
         options.addOption("rst", "remoteServerTls", true, "TLS options for the remote server. Use the same format as -tls1, but only the context is needed");
         options.addOption("rcs", "remoteCacheSize", true, "When using a remote cache, set a buffer size to more efficiently transfer records from the "
                 + "remote server to this comparator. Note this parameter only has an effect if >= 4");
+        options.addOption("V", "verbose", false, "Turn on verbose logging, especially for cluster details and TLS connections");
         
         return options;
     }
@@ -561,6 +563,7 @@ public class ClusterComparatorOptions {
         }
         this.remoteServerTls = parseTlsPolicy(cl.getOptionValue("remoteServerTls"));
         this.remoteCacheSize = Integer.valueOf(cl.getOptionValue("remoteCacheSize", "0"));
+        this.verbose = cl.hasOption("verbose");
         this.validate(options);
     }
 
@@ -721,6 +724,10 @@ public class ClusterComparatorOptions {
     
     public int getRemoteCacheSize() {
         return remoteCacheSize;
+    }
+    
+    public boolean isVerbose() {
+        return verbose;
     }
 }
 

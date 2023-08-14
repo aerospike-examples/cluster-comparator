@@ -36,13 +36,14 @@ public class RemoteServer {
     public static final int CMD_RS_CLOSE = 11;
     public static final int CMD_RS_MULTI = 12;
     
-    
+    private final boolean verbose;
     private final AerospikeClientAccess client;
     private final int port;
     
-    public RemoteServer(final AerospikeClientAccess client, final int port, final int heartbeatPort) {
+    public RemoteServer(final AerospikeClientAccess client, final int port, final int heartbeatPort, final boolean verbose) {
         this.client = client;
         this.port = port;
+        this.verbose = verbose;
         if (heartbeatPort > 0) {
             Thread heartbeatThread = new Thread(() -> {
                 ServerSocket serverSocket = null;
@@ -126,12 +127,14 @@ public class RemoteServer {
             }
             socketServer = sslSocket;
             System.out.printf("Starting remote server with TLS configuration: %s\n", socketServer);
-            SSLParameters params = sslSocket.getSSLParameters();
-            System.out.printf("\tEndpoint identification algorithm: %s\n", params.getEndpointIdentificationAlgorithm());
-            System.out.printf("\tApplication Protocols: %s\n", join(params.getApplicationProtocols()));
-            System.out.printf("\tCipher Suites: %s\n", join(params.getCipherSuites()));
-            System.out.printf("\tProtocols: %s\n", join(params.getProtocols()));
-            System.out.printf("\tNeeds Client Auth: %s\n", params.getNeedClientAuth());
+            if (verbose) {
+                SSLParameters params = sslSocket.getSSLParameters();
+                System.out.printf("\tEndpoint identification algorithm: %s\n", params.getEndpointIdentificationAlgorithm());
+                System.out.printf("\tApplication Protocols: %s\n", join(params.getApplicationProtocols()));
+                System.out.printf("\tCipher Suites: %s\n", join(params.getCipherSuites()));
+                System.out.printf("\tProtocols: %s\n", join(params.getProtocols()));
+                System.out.printf("\tNeeds Client Auth: %s\n", params.getNeedClientAuth());
+            }
         }
         else {
             socketServer = new ServerSocket(port);
