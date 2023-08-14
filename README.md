@@ -14,11 +14,11 @@ There are lots of options which can control how it does this, and how it handles
 The comparator can run in two modes, depending on the visibiltiy of the clusters to the comparator node.
 
 ### Comparator has visibility to both clusters
-![Standard Mode](images/clusterComparatorStandardMode.jpg)
+![Standard Mode](images/clusterComparatorStandardMode.png)
 This is the most common usage and requires the comparator to have visibility to both clusters. In this case only one comparator is needed, and the various parameters which apply to each cluster like `--hosts1` and `--hosts2` can be used to control connectivity to the appropriate cluster.
 
 ### No node has visibility to both clusters
-![Proxy Mode](images/clusterComparatorProxyMode.jpg)
+![Proxy Mode](images/clusterComparatorProxyMode.png)
 This mode is used in situations where firewalls and isolation rules prevent both clusters being visible to a single node. An example of this is comparing an on-premise cluster to a cloud-based cluster where the cloud-based cluster does not have public IP addresses and there is no VPN tunnel between the on-premise cluster and the cloud-based cluster.
 
 In this mode, two comparator instances are need, each one having visibility to one cluster. One of these is designated as a controller, and the other is a worker. The controller has all the main options applied to is, such as the compare mode, action to take when differences are found, and so on. The worker simply grants visibility to the remote cluster.
