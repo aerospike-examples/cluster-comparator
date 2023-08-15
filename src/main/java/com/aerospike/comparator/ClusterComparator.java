@@ -359,7 +359,7 @@ public class ClusterComparator {
                 }
                 else {
                     if (options.isRecordLevelCompare()) {
-                        if (client1.isLocal() && client2.isLocal()) {
+//                        if (client1.isLocal() && client2.isLocal()) {
                             Record record1 = recordSet1.getRecord();
                             Record record2 = recordSet2.getRecord();
                             DifferenceSet compareResult = comparator.compare(key1, record1, record2,
@@ -368,11 +368,11 @@ public class ClusterComparator {
                             if (compareResult.areDifferent()) {
                                 differentRecords(partitionId, key2, null, null, compareResult);
                             }
-                        }
-                        else {
-                            byte[] record1 = recordSet1.getRecordHash();
-                            byte[] record2 = recordSet2.getRecordHash();
-                        }
+//                        }
+//                        else {
+//                            byte[] record1 = recordSet1.getRecordHash();
+//                            byte[] record2 = recordSet2.getRecordHash();
+//                        }
                         if (options.getRecordCompareLimit() > 0 && totalRecordsCompared.incrementAndGet() >= options.getRecordCompareLimit()) {
                             forceTerminate = true;
                         }
