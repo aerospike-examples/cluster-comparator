@@ -42,6 +42,8 @@ import com.aerospike.comparator.dbaccess.RemoteAerospikeClient;
 import com.aerospike.comparator.dbaccess.RemoteServer;
 import com.aerospike.comparator.dbaccess.RemoteUtils;
 
+import gnu.crypto.hash.RipeMD160;
+
 public class ClusterComparator {
 
     // TODO:
@@ -324,6 +326,9 @@ public class ClusterComparator {
         PartitionFilter filter1 = PartitionFilter.id(partitionId);
         PartitionFilter filter2 = PartitionFilter.id(partitionId);
         
+        if (options.isDebug()) {
+            System.out.printf("Thread %d starting comparison of namespace %s, partition %d\n", Thread.currentThread().getId(), namespace, partitionId);
+        }
         RecordSetAccess recordSet1 = client1.queryPartitions(queryPolicy, statement, filter1);
         RecordSetAccess recordSet2 = client2.queryPartitions(queryPolicy, statement, filter2);
         boolean side1Valid = getNextRecord(recordSet1, Side.SIDE_1);
@@ -337,6 +342,9 @@ public class ClusterComparator {
                 Key key1 = side1Valid ? recordSet1.getKey() : null;
                 Key key2 = side2Valid ? recordSet2.getKey() : null;
                 int result = compare(key1, key2);
+                if (options.isDebug()) {
+                    System.out.printf("Comparing keys %s, %s => %d\n", key1, key2, result);
+                }
                 if (result < 0) {
                     // The digests go down as we go through the partition, so if side 2 is > side 1
                     // it means that side 1 has missed this one and we need to advance side2
@@ -351,13 +359,19 @@ public class ClusterComparator {
                 }
                 else {
                     if (options.isRecordLevelCompare()) {
-                        Record record1 = recordSet1.getRecord();
-                        Record record2 = recordSet2.getRecord();
-                        DifferenceSet compareResult = comparator.compare(key1, record1, record2,
-                                options.getPathOptions(),
-                                options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
-                        if (compareResult.areDifferent()) {
-                            differentRecords(partitionId, key2, null, null, compareResult);
+                        if (client1.isLocal() && client2.isLocal()) {
+                            Record record1 = recordSet1.getRecord();
+                            Record record2 = recordSet2.getRecord();
+                            DifferenceSet compareResult = comparator.compare(key1, record1, record2,
+                                    options.getPathOptions(),
+                                    options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
+                            if (compareResult.areDifferent()) {
+                                differentRecords(partitionId, key2, null, null, compareResult);
+                            }
+                        }
+                        else {
+                            byte[] record1 = recordSet1.getRecordHash();
+                            byte[] record2 = recordSet2.getRecordHash();
                         }
                         if (options.getRecordCompareLimit() > 0 && totalRecordsCompared.incrementAndGet() >= options.getRecordCompareLimit()) {
                             forceTerminate = true;
@@ -605,7 +619,7 @@ public class ClusterComparator {
     
     private void startRemoteServer() {
         AerospikeClientAccess client1 = this.connectClient(Side.SIDE_1);
-        RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort(), options.getRemoteServerHeartbeatPort(), options.isVerbose());
+        RemoteServer remoteServer = new RemoteServer(client1, options.getRemoteServerPort(), options.getRemoteServerHeartbeatPort(), options.isVerbose(), options.isDebug());
         try {
             remoteServer.start(options.getRemoteServerTls());
         } catch (IOException e) {

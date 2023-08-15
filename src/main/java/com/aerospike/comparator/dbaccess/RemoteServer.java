@@ -36,61 +36,67 @@ public class RemoteServer {
     public static final int CMD_RS_CLOSE = 11;
     public static final int CMD_RS_MULTI = 12;
     
+    private final boolean debug;
     private final boolean verbose;
     private final AerospikeClientAccess client;
     private final int port;
     
-    public RemoteServer(final AerospikeClientAccess client, final int port, final int heartbeatPort, final boolean verbose) {
+    public RemoteServer(final AerospikeClientAccess client, final int port, final int heartbeatPort, final boolean verbose, final boolean debug) {
         this.client = client;
         this.port = port;
         this.verbose = verbose;
+        this.debug = debug;
         if (heartbeatPort > 0) {
-            Thread heartbeatThread = new Thread(() -> {
-                ServerSocket serverSocket = null;
-                try {
-                    serverSocket = new ServerSocket(heartbeatPort);
-                    System.out.printf("Server heartbeat listening on port %d\n", heartbeatPort);
-                }
-                catch (IOException ioe) {
-                    System.err.printf("Error creating heartbeat socket on port %d\n", heartbeatPort);
-                }
-                while (true) {
-                    Socket socket = null;
-                    DataInputStream dis = null;
-                    DataOutputStream dos = null;
-                    try {
-                        socket = serverSocket.accept();
-                        dis = new DataInputStream(socket.getInputStream());
-                        dos = new DataOutputStream(socket.getOutputStream());
-                        while (true) {
-                            byte b = dis.readByte();
-                            dos.writeByte(b);
-                        }
-                    }
-                    catch (IOException ioe) {
-                        if (dis != null) {
-                            try {
-                                dis.close();
-                            } catch (IOException ignored) {}
-                        }
-                        if (dos != null) {
-                            try {
-                                dos.close();
-                            } catch (IOException ignored) {}
-                        }
-                        if (socket != null) {
-                            try {
-                                socket.close();
-                            } catch (IOException ignored) {}
-                        }
-                    }
-                }
-            });
-            heartbeatThread.setDaemon(true);
-            heartbeatThread.start();
+            this.startHeartbeatServer(heartbeatPort);
         }
     }
     
+    private void startHeartbeatServer(int heartbeatPort) {
+        Thread heartbeatThread = new Thread(() -> {
+            ServerSocket serverSocket = null;
+            try {
+                serverSocket = new ServerSocket(heartbeatPort);
+                System.out.printf("Server heartbeat listening on port %d\n", heartbeatPort);
+            }
+            catch (IOException ioe) {
+                System.err.printf("Error creating heartbeat socket on port %d\n", heartbeatPort);
+            }
+            while (true) {
+                Socket socket = null;
+                DataInputStream dis = null;
+                DataOutputStream dos = null;
+                try {
+                    socket = serverSocket.accept();
+                    dis = new DataInputStream(socket.getInputStream());
+                    dos = new DataOutputStream(socket.getOutputStream());
+                    while (true) {
+                        byte b = dis.readByte();
+                        dos.writeByte(b);
+                    }
+                }
+                catch (IOException ioe) {
+                    if (dis != null) {
+                        try {
+                            dis.close();
+                        } catch (IOException ignored) {}
+                    }
+                    if (dos != null) {
+                        try {
+                            dos.close();
+                        } catch (IOException ignored) {}
+                    }
+                    if (socket != null) {
+                        try {
+                            socket.close();
+                        } catch (IOException ignored) {}
+                    }
+                }
+            }
+        });
+        heartbeatThread.setDaemon(true);
+        heartbeatThread.start();
+    }
+
     private String join(String[] strings) {
         if (strings == null) {
             return null;
@@ -146,13 +152,14 @@ public class RemoteServer {
                 socket = socketServer.accept();
                 System.out.printf("New client connection established: %s\n", dumpSocketDetails(socket));
                 
-                SocketHandler handler = new SocketHandler(socket, client);
+                SocketHandler handler = new SocketHandler(socket, client, this.debug);
                 Thread thread = new Thread(handler);
                 thread.start();
             }
             catch (IOException ioe) {
-                System.err.println("Error attaching to socket. Ignoring and continuing.");
-                RemoteUtils.handleIOException(ioe);
+                // Ignore exceptions in establishing communications, this can be caused by heartbeat protocols.
+//                System.err.println("Error attaching to socket. Ignoring and continuing.");
+//                RemoteUtils.handleIOException(ioe);
                 
             }
         }
@@ -164,10 +171,12 @@ public class RemoteServer {
         private final DataInputStream dis;
         private final DataOutputStream dos;
         private final Socket socket;
+        private final boolean debug;
         
-        public SocketHandler(Socket socket, AerospikeClientAccess client) throws IOException {
+        public SocketHandler(Socket socket, AerospikeClientAccess client, boolean debug) throws IOException {
             this.client = client;
             this.socket = socket;
+            this.debug = debug;
             this.dis = new DataInputStream(socket.getInputStream()); 
             this.dos = new DataOutputStream(socket.getOutputStream());
         }
@@ -202,30 +211,68 @@ public class RemoteServer {
                 switch (command) {
                 case CMD_RS_MULTI:
                     int num = dis.readInt();
+                    long now = 0;
+                    int recordsReturned = 0;
+                    if (this.debug) {
+                        System.out.printf("Processing request for %s records\n", num);
+                        now = System.nanoTime();
+                    }
                     boolean hasMore = recordsSet.next();
                     for (int i = 0; hasMore && i < num; i++) {
                         dos.writeBoolean(true);
                         RemoteUtils.sendKey(recordsSet.getKey(), dos);
                         RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
                         hasMore = recordsSet.next();
+                        recordsReturned++;
                     }
                     if (!hasMore) {
                         dos.writeBoolean(false);
                     }
+                    if (this.debug) {
+                        long time = System.nanoTime() - now;
+                        System.out.printf("Finished processing request for %,d records in %,dus (%,d returned)\n", num, time/1000, recordsReturned);
+                    }
                     break;
                     
                 case CMD_RS_NEXT:
+                    now = 0;
+                    if (this.debug) {
+                        System.out.printf("Processing request for next record\n");
+                        now = System.nanoTime();
+                    }
                     dos.writeBoolean(recordsSet.next());
+                    if (this.debug) {
+                        long time = System.nanoTime() - now;
+                        System.out.printf("Finished processing request for next records in %,dus\n", time/1000);
+                    }
                     break;
                     
                 case CMD_RS_KEY:
+                    now = 0;
+                    if (this.debug) {
+                        System.out.printf("Processing for key\n");
+                        now = System.nanoTime();
+                    }
                     Key key = recordsSet.getKey();
                     RemoteUtils.sendKey(key, dos);
+                    if (this.debug) {
+                        long time = System.nanoTime() - now;
+                        System.out.printf("Finished processing request for key in %,dus\n", time/1000);
+                    }
                     break;
                  
                 case CMD_RS_RECORD:
+                    now = 0;
+                    if (this.debug) {
+                        System.out.printf("Processing request for record\n");
+                        now = System.nanoTime();
+                    }
                     Record record = recordsSet.getRecord();
                     RemoteUtils.sendRecord(record, dos);
+                    if (this.debug) {
+                        long time = System.nanoTime() - now;
+                        System.out.printf("Finished processing request for record in %,dus\n", time/1000);
+                    }
                     break;
                     
                 case CMD_RS_CLOSE:

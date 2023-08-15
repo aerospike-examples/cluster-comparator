@@ -190,4 +190,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
         }
     }
 
+    @Override
+    public boolean isLocal() {
+        return false;
+    }
+
 }

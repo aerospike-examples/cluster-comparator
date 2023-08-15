@@ -15,7 +15,9 @@ import com.aerospike.client.AerospikeException.InvalidNode;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
+import com.aerospike.client.Value;
 import com.aerospike.client.cluster.ClusterUtilities;
+import com.aerospike.client.command.ParticleType;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.Replica;
 
@@ -25,6 +27,31 @@ public class RemoteUtils {
         dos.writeUTF(key.setName);
         dos.writeInt(key.digest.length);
         dos.write(key.digest);
+        if (key.userKey != null) {
+            int type = key.userKey.getType();
+            dos.writeInt(type);
+            Object value = key.userKey.getObject();
+            switch (type) {
+            case ParticleType.BLOB:
+                byte[] bytes = (byte[]) value;
+                dos.writeInt(bytes.length);
+                dos.write(bytes);
+                break;
+            case ParticleType.DOUBLE:
+                Double doubleNumber = (Double)value;
+                dos.writeDouble(doubleNumber);
+                break;
+            case ParticleType.INTEGER:
+                dos.writeLong(key.userKey.toLong());
+                break;
+            case ParticleType.STRING:
+                dos.writeUTF(key.userKey.toString());
+                break;
+            }
+        }
+        else {
+            dos.writeInt(0);
+        }
     }
     
     public static Key readKey(DataInputStream dis) throws IOException {
@@ -32,7 +59,23 @@ public class RemoteUtils {
         String setName = dis.readUTF();
         int length = dis.readInt();
         byte[] bytes = dis.readNBytes(length);
-        return new Key(namespace, bytes, setName, null);
+        int type = dis.readInt();
+        Value value = null;
+        if (type == ParticleType.BLOB) {
+            length = dis.readInt();
+            byte[] keyBytes = dis.readNBytes(length);
+            value = Value.get(keyBytes);
+        }
+        else if (type == ParticleType.DOUBLE) {
+            value = Value.get(dis.readDouble());
+        }
+        else if (type == ParticleType.INTEGER) {
+            value = Value.get(dis.readLong());
+        }
+        else if (type == ParticleType.STRING) {
+            value = Value.get(dis.readUTF());
+        }
+        return new Key(namespace, bytes, setName, value);
     }
     
     public static void sendPolicy(Policy policy, DataOutputStream dos) throws IOException {

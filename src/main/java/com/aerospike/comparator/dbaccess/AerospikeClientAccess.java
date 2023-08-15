@@ -12,6 +12,7 @@ import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
 
 public interface AerospikeClientAccess {
+    boolean isLocal();
     void close();
     void touch(WritePolicy policy, Key key);
     Record get(Policy policy, Key key);

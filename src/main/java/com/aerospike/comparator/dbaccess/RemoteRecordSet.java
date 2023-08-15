@@ -84,4 +84,10 @@ public class RemoteRecordSet implements RecordSetAccess {
             
         }
     }
+
+    @Override
+    public byte[] getRecordHash() {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }

@@ -7,5 +7,6 @@ public interface RecordSetAccess {
     boolean next();
     Key getKey();
     Record getRecord();
+    byte[] getRecordHash();
     void close();
 }

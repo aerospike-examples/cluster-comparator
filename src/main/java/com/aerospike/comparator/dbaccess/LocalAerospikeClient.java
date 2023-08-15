@@ -81,4 +81,9 @@ public class LocalAerospikeClient implements AerospikeClientAccess {
     public List<String> getNodeNames() {
         return Arrays.asList(client.getNodes()).stream().map(node -> node.getName()).collect(Collectors.toList());
     }
+
+    @Override
+    public boolean isLocal() {
+        return true;
+    }
 }
