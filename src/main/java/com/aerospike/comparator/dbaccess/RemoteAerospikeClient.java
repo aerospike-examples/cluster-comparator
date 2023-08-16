@@ -21,9 +21,12 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
 
     private final ConnectionPool pool;
     private final int cacheSize;
-    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, int cacheSize, TlsPolicy tlsPolicy) throws IOException {
+    private final boolean useHashes;
+    
+    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, int cacheSize, TlsPolicy tlsPolicy, boolean useHashes) throws IOException {
         this.pool = new ConnectionPool(host, port, defaultPoolSize, tlsPolicy);
         this.cacheSize = cacheSize;
+        this.useHashes = useHashes;
     }
     
     @Override
@@ -111,7 +114,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDos().writeInt(filter.getCount());
             conn.getDis().readUTF();    // Getting this back means the server is ready.
             // We keep hold of this connection until the recordset is closed, which simplifies the back-and-forth
-            return new RemoteRecordSet(pool, conn, this.cacheSize);
+            return new RemoteRecordSet(pool, conn, this.cacheSize, useHashes);
         }
         catch (IOException ioe) {
             RemoteUtils.handleIOException(ioe);

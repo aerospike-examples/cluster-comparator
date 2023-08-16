@@ -102,6 +102,7 @@ public class RecordComparator {
         }
         return hash;
     }
+    
     private void compare(List<?> list1, List<?> list2, DifferenceSet differences) {
         EnumSet<PathAction> pathOptions = differences.getOptionsForCurrentPath();
         if (pathOptions != null && pathOptions.contains(PathAction.IGNORE)) {
@@ -193,42 +194,13 @@ public class RecordComparator {
         result.popPath();
         return result;
     }
-
-    
-    public static Map<String, Object> createMap() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("key1", 1);
-        map.put("key2", "tim");
-        map.put("key3", new byte[] { (byte) 0xff, (byte) 0xfe, (byte) 0xcd, 0x00, 0x01, 0x7f });
-        Map<Object, Object> m2 = new HashMap<>();
-        m2.put(1, 1);
-        map.put("list", Arrays.asList(17, "bob", 329, "a String"));
-        Map<String, Object> m = new HashMap<>();
-        m.put("a", "aaa");
-        m.put("b", "aaa4");
-        m.put("c", "aa3a");
-        m.put("d", "a2aa");
-        map.put("map", m);
-        return map;
-    }
-
-    public static void main(String[] args) {
-        Map<String, Object> map1 = createMap();
-        map1.put("key1", 2);
-        map1.put("key5", "only key 5");
-
-        Map<String, Object> map2 = createMap();
-        map2.put("key6", "map2, key6");
-        ((Map<String, Object>)map2.get("map")).put("e", "Only on 2");
-        
-        ((byte [])map2.get("key3"))[3] = 12;
-        Record r1 = new Record(map1, 0, 0);
-        Record r2 = new Record(map2, 0, 0);
-        
-        PathOptions options = new PathOptions();
-        options.setPaths(Arrays.asList(new PathOption("/unordered", PathAction.COMPAREUNORDERED)));
-        DifferenceSet diffs = new RecordComparator().compare(null, r1, r2, options, false);
-        System.out.println(diffs.toString());
-        
+    public DifferenceSet compare(Key key, byte[] record1hash, byte[] record2hash, PathOptions pathOptions) {
+        DifferenceSet result = new DifferenceSet(key, true, pathOptions);
+        result.pushPath(key.namespace);
+        result.pushPath(key.setName);
+        compare(record1hash, record2hash, "", result);
+        result.popPath();
+        result.popPath();
+        return result;
     }
 }

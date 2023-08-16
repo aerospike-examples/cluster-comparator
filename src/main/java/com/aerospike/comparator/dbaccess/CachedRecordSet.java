@@ -11,11 +11,17 @@ public class CachedRecordSet {
     private static class Entry {
         boolean hasNext;
         Record record;
+        byte[] recordHash;
         Key key;
         
         public Entry(boolean hasNext, Key key, Record record) {
             this.hasNext = hasNext;
             this.record = record;
+            this.key = key;
+        }
+        public Entry(boolean hasNext, Key key, byte[] recordHash) {
+            this.hasNext = hasNext;
+            this.recordHash = recordHash;
             this.key = key;
         }
         public Record getRecord() {
@@ -27,8 +33,12 @@ public class CachedRecordSet {
         public boolean hasNext() {
             return this.hasNext;
         }
+        public byte[] getRecordHash() {
+            return recordHash;
+        }
     }
     
+    private final Entry END_OF_STREAM_ENTRY = new Entry(false, null, (Record)null);
     private final int cacheSize;
     private final ArrayBlockingQueue<Entry> queue;
     private final Thread fillingThread;
@@ -38,11 +48,13 @@ public class CachedRecordSet {
     private volatile boolean isFinished = false;
     private final Object lock = new Object();
     private final Connection connection;
+    private final boolean storeHashes;
     
-    public CachedRecordSet(int cacheSize, Connection connection) {
+    public CachedRecordSet(final int cacheSize, final Connection connection, final boolean storeHashes) {
         this.cacheSize = cacheSize;
         this.connection = connection;
         this.queue = new ArrayBlockingQueue<>(cacheSize);
+        this.storeHashes = storeHashes;
         this.fillingThread = new Thread(() -> {
             try {
                 this.isFinished = !readMulti(cacheSize, connection);
@@ -75,21 +87,30 @@ public class CachedRecordSet {
     
     private boolean readMulti(int size, Connection connection) throws IOException, InterruptedException {
         isFilling = true;
-        connection.getDos().write(RemoteServer.CMD_RS_MULTI);
+        connection.getDos().write(storeHashes ? RemoteServer.CMD_RS_MULTI_RECORD_HASH : RemoteServer.CMD_RS_MULTI);
         connection.getDos().writeInt(size);
         boolean hasMore = true;
         for (int i = 0; i < size && !close; i++) {
             boolean hasNext = connection.getDis().readBoolean();
             if (!hasNext) {
-                this.queue.put(new Entry(false, null, null));
+                this.queue.put(END_OF_STREAM_ENTRY);
                 hasMore = false;
                 break;
             }
             else {
-                this.queue.put(new Entry(
-                        true,
-                        RemoteUtils.readKey(connection.getDis()),
-                        RemoteUtils.readRecord(connection.getDis())));
+                if (storeHashes) {
+                    this.queue.put(new Entry(
+                            true,
+                            RemoteUtils.readKey(connection.getDis()),
+                            RemoteUtils.readRecordHash(connection.getDis())));
+                }
+                else {
+                    this.queue.put(new Entry(
+                            true,
+                            RemoteUtils.readKey(connection.getDis()),
+                            RemoteUtils.readRecord(connection.getDis())));
+
+                }
             }
         }
         isFilling = false;
@@ -111,11 +132,28 @@ public class CachedRecordSet {
         }
         return this.current.hasNext();
     }
-    public Record getRecord() {
-        if (this.current != null) {
-            return this.current.getRecord();
+    
+    public byte[] getRecordHash() {
+        if (this.storeHashes) {
+            if (this.current != null) {
+                return this.current.getRecordHash();
+            }
+            return null;
         }
-        return null;
+        else {
+            throw new IllegalAccessError("getRecordHash cannot be called if storeHashes is false");
+        }
+    }
+    public Record getRecord() {
+        if (!this.storeHashes) {
+            if (this.current != null) {
+                return this.current.getRecord();
+            }
+            return null;
+        }
+        else {
+            throw new IllegalAccessError("getRecord cannot be called if storeHashes is true");
+        }
     }
     
     public Key getKey() {
@@ -130,5 +168,9 @@ public class CachedRecordSet {
         connection.getDis().readInt();
         this.close = true;
         this.fillingThread.interrupt();
+    }
+    
+    public boolean isStoreHashes() {
+        return storeHashes;
     }
 }

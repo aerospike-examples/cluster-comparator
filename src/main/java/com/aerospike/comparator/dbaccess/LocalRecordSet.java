@@ -42,20 +42,6 @@ public class LocalRecordSet implements RecordSetAccess {
     
     @Override
     public byte[] getRecordHash() {
-        Record record = this.getRecord();
-        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-            oos.writeObject(record.bins);
-            bos.flush();
-            byte[] bytes = bos.toByteArray();
-            
-            RipeMD160 hash = new RipeMD160();
-            hash.update(bytes, 0, bytes.length);
-            return hash.digest();
-        }
-        catch (IOException ioe) {
-            throw new AerospikeException(ioe);
-        }
+        return RemoteUtils.getRecordHash(this.getRecord());
     }
-
 }

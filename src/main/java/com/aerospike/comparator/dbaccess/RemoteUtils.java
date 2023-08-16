@@ -21,6 +21,8 @@ import com.aerospike.client.command.ParticleType;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.Replica;
 
+import gnu.crypto.hash.RipeMD160;
+
 public class RemoteUtils {
     public static void sendKey(Key key, DataOutputStream dos) throws IOException {
         dos.writeUTF(key.namespace);
@@ -151,6 +153,34 @@ public class RemoteUtils {
         }
     }
     
+    public static void sendRecordHash(Record record, DataOutputStream dos) throws IOException{
+        if (record == null) {
+            dos.writeBoolean(false);
+        }
+        else {
+            dos.writeBoolean(true);
+            dos.writeInt(record.expiration);
+            dos.writeInt(record.generation);
+            byte[] hash = getRecordHash(record);
+            dos.writeInt(hash.length);
+            dos.write(hash);
+        }
+    }
+    
+    public static byte[] readRecordHash(DataInputStream dis) throws IOException {
+        boolean exists = dis.readBoolean();
+        if (exists) {
+            /*int expiration = */ dis.readInt();
+            /*int generation = */ dis.readInt();
+            int length = dis.readInt();
+            byte[] bytes = dis.readNBytes(length);
+            return bytes;
+        }
+        else {
+            return null;
+        }
+    }
+    
     public static void handleIOException(IOException ioe) {
         ioe.printStackTrace();
     }
@@ -158,6 +188,22 @@ public class RemoteUtils {
     public static void handleInvalidNode(InvalidNode in, IAerospikeClient client) {
         ClusterUtilities clusterUtils = new ClusterUtilities(client);
         clusterUtils.printInfo(true);
+    }
+    
+    public static byte[] getRecordHash(Record record) {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+            oos.writeObject(record.bins);
+            bos.flush();
+            byte[] bytes = bos.toByteArray();
+            
+            RipeMD160 hash = new RipeMD160();
+            hash.update(bytes, 0, bytes.length);
+            return hash.digest();
+        }
+        catch (IOException ioe) {
+            throw new AerospikeException(ioe);
+        }
     }
     
     public static void main(String[] args) throws IOException {

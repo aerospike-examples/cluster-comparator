@@ -157,7 +157,7 @@ public class ClusterComparator {
                     System.out.printf("Remote cluster %d: hosts: %s tlsPolicy: %s\n", 
                             side.value, hostNames, tlsPolicyAsString(clientPolicy.tlsPolicy));
                 }
-                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, options.getRemoteCacheSize(), clientPolicy.tlsPolicy);
+                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, options.getRemoteCacheSize(), clientPolicy.tlsPolicy, options.isRemoteServerHashes());
             }
             catch (IOException ioe) {
                 throw new AerospikeException(ioe);
@@ -212,19 +212,7 @@ public class ClusterComparator {
         return partitionList;
     }
     
-    private int compare(Key key1, Key key2) {
-        if (key1 == null && key2 == null) {
-            // This should never happen
-            return 0;
-        }
-        else if (key1 == null) {
-            return -1;
-        }
-        else if (key2 == null) {
-            return 1;
-        }
-        byte[] digest1 = key1.digest;
-        byte[] digest2 = key2.digest;
+    private int compare(byte[] digest1, byte[] digest2) {
         if (digest1.length != digest2.length) {
             throw new IllegalArgumentException("Digest1 has a length of " + digest1.length + ", digest2 has a length of " + digest2.length);
         }
@@ -239,6 +227,19 @@ public class ClusterComparator {
             }
         }
         return 0;
+    }
+    private int compare(Key key1, Key key2) {
+        if (key1 == null && key2 == null) {
+            // This should never happen
+            return 0;
+        }
+        else if (key1 == null) {
+            return -1;
+        }
+        else if (key2 == null) {
+            return 1;
+        }
+        return compare(key1.digest, key2.digest);
     }
     
     private void differentRecords(int partitionId, Key key, Record record1, Record record2, DifferenceSet differences) {
@@ -359,20 +360,34 @@ public class ClusterComparator {
                 }
                 else {
                     if (options.isRecordLevelCompare()) {
-//                        if (client1.isLocal() && client2.isLocal()) {
+                        DifferenceSet compareResult = null;
+                        if (client1.isLocal() && client2.isLocal()) {
                             Record record1 = recordSet1.getRecord();
                             Record record2 = recordSet2.getRecord();
-                            DifferenceSet compareResult = comparator.compare(key1, record1, record2,
+                            compareResult = comparator.compare(key1, record1, record2,
                                     options.getPathOptions(),
                                     options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
-                            if (compareResult.areDifferent()) {
-                                differentRecords(partitionId, key2, null, null, compareResult);
+                        }
+                        else {
+                            byte[] record1hash = recordSet1.getRecordHash();
+                            byte[] record2hash = recordSet2.getRecordHash();
+                            int recordsEqual = compare(record1hash, record2hash);
+                            if (recordsEqual != 0) {
+                                if (options.getCompareMode() == CompareMode.RECORDS_DIFFERENT) {
+                                    compareResult = comparator.compare(key1, record1hash, record2hash,
+                                            options.getPathOptions());
+                                }
+                                else {
+                                    Record record1 = client1.isLocal() ? recordSet1.getRecord() : client1.get(null, key1);
+                                    Record record2 = client2.isLocal() ? recordSet2.getRecord() : client2.get(null, key2);
+                                    compareResult = comparator.compare(key1, record1, record2,
+                                            options.getPathOptions(), false);
+                                }
                             }
-//                        }
-//                        else {
-//                            byte[] record1 = recordSet1.getRecordHash();
-//                            byte[] record2 = recordSet2.getRecordHash();
-//                        }
+                        }
+                        if (compareResult != null && compareResult.areDifferent()) {
+                            differentRecords(partitionId, key2, null, null, compareResult);
+                        }
                         if (options.getRecordCompareLimit() > 0 && totalRecordsCompared.incrementAndGet() >= options.getRecordCompareLimit()) {
                             forceTerminate = true;
                         }

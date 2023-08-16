@@ -10,7 +10,6 @@ import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.X509ExtendedKeyManager;
 import javax.net.ssl.X509ExtendedTrustManager;
 
@@ -85,6 +84,7 @@ public class ClusterComparatorOptions {
     private int remoteServerHeartbeatPort = -1;
     private TlsPolicy remoteServerTls = null;
     private int remoteCacheSize;
+    private boolean remoteServerHashes = true;
     private boolean verbose = false;
     private boolean debug = false;
     
@@ -412,6 +412,8 @@ public class ClusterComparatorOptions {
         options.addOption("rst", "remoteServerTls", true, "TLS options for the remote server. Use the same format as -tls1, but only the context is needed");
         options.addOption("rcs", "remoteCacheSize", true, "When using a remote cache, set a buffer size to more efficiently transfer records from the "
                 + "remote server to this comparator. Note this parameter only has an effect if >= 4");
+        options.addOption("rsh", "remoteServerHashes", true, "When using the remote server, send hashes for record comparison. Default: true. Turning this to false might be more "
+                + "efficient if you are finding record level differences and there are a lot of mismatching records.");
         options.addOption("V", "verbose", false, "Turn on verbose logging, especially for cluster details and TLS connections");
         options.addOption("D", "debug", false, "Turn on debug mode. This will output a lot of information and automatically turn on verbose mode and turn silent mode off");
         
@@ -565,6 +567,7 @@ public class ClusterComparatorOptions {
         }
         this.remoteServerTls = parseTlsPolicy(cl.getOptionValue("remoteServerTls"));
         this.remoteCacheSize = Integer.valueOf(cl.getOptionValue("remoteCacheSize", "0"));
+        this.remoteServerHashes = Boolean.valueOf(cl.getOptionValue("remoteServerHashes", "true"));
         this.verbose = cl.hasOption("verbose");
         this.debug = cl.hasOption("debug");
         if (this.debug) {
@@ -731,6 +734,10 @@ public class ClusterComparatorOptions {
     
     public int getRemoteCacheSize() {
         return remoteCacheSize;
+    }
+    
+    public boolean isRemoteServerHashes() {
+        return remoteServerHashes;
     }
     
     public boolean isVerbose() {

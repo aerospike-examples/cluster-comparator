@@ -11,12 +11,12 @@ public class RemoteRecordSet implements RecordSetAccess {
     private final Connection connection;
     private final CachedRecordSet cachedRecordSet;
     
-    public RemoteRecordSet(ConnectionPool pool, Connection connection, int cacheSize) {
+    public RemoteRecordSet(ConnectionPool pool, Connection connection, int cacheSize, boolean storeHashes) {
         super();
         this.pool = pool;
         this.connection = connection;
         if (cacheSize >= 4) {
-            this.cachedRecordSet = new CachedRecordSet(cacheSize, connection);
+            this.cachedRecordSet = new CachedRecordSet(cacheSize, connection, storeHashes);
         }
         else {
             this.cachedRecordSet = null;
@@ -66,6 +66,20 @@ public class RemoteRecordSet implements RecordSetAccess {
     }
 
     @Override
+    public byte[] getRecordHash() {
+        if (cachedRecordSet != null) {
+            return cachedRecordSet.getRecordHash();
+        }
+        try {
+            connection.getDos().write(RemoteServer.CMD_RS_RECORD_HASH);
+            return RemoteUtils.readRecordHash(connection.getDis());
+        }
+        catch (IOException ioe) {
+            throw new AerospikeException(ioe);
+        }
+    }
+
+    @Override
     public void close() {
         try {
             if (cachedRecordSet != null) {
@@ -83,11 +97,5 @@ public class RemoteRecordSet implements RecordSetAccess {
             pool.release(connection);
             
         }
-    }
-
-    @Override
-    public byte[] getRecordHash() {
-        // TODO Auto-generated method stub
-        return null;
     }
 }
