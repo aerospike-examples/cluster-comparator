@@ -225,7 +225,11 @@ public class RemoteServer {
                     boolean hasMore = recordsSet.next();
                     for (int i = 0; hasMore && i < num; i++) {
                         dos.writeBoolean(true);
-                        RemoteUtils.sendKey(recordsSet.getKey(), dos);
+                        Key key = recordsSet.getKey();
+                        if (debug) {
+                            System.out.printf("Writing data for %s\n", key);
+                        }
+                        RemoteUtils.sendKey(key, dos);
                         if (command == CMD_RS_MULTI_RECORD_HASH) {
                             RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos);
                         }
