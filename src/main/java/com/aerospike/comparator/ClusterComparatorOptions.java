@@ -574,6 +574,11 @@ public class ClusterComparatorOptions {
             this.silent = false;
             this.verbose = true;
         }
+        if (this.compareMode == CompareMode.QUICK_NAMESPACE && this.remoteCacheSize >= 4) {
+            System.out.println("Remote caching is incompatible with QUICK_NAMESPACE mode, turning off caching.");
+            this.remoteCacheSize = 0;
+        }
+
         this.validate(options);
     }
 

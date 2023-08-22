@@ -37,6 +37,7 @@ public class RemoteServer {
     public static final int CMD_RS_MULTI = 12;
     public static final int CMD_RS_RECORD_HASH = 13;
     public static final int CMD_RS_MULTI_RECORD_HASH = 14;
+    public static final int CMD_RS_MULTI_KEY_ONLY = 15;
     
     private final boolean debug;
     private final boolean verbose;
@@ -212,18 +213,25 @@ public class RemoteServer {
                 int command = dis.read();
                 switch (command) {
                 case CMD_RS_MULTI:
+                case CMD_RS_MULTI_KEY_ONLY:
+                case CMD_RS_MULTI_RECORD_HASH:
                     int num = dis.readInt();
                     long now = 0;
                     int recordsReturned = 0;
                     if (this.debug) {
-                        System.out.printf("Processing request for %s records\n", num);
+                        System.out.printf("Processing request for %s keys/records (%d)\n", num, command);
                         now = System.nanoTime();
                     }
                     boolean hasMore = recordsSet.next();
                     for (int i = 0; hasMore && i < num; i++) {
                         dos.writeBoolean(true);
                         RemoteUtils.sendKey(recordsSet.getKey(), dos);
-                        RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
+                        if (command == CMD_RS_MULTI_RECORD_HASH) {
+                            RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos);
+                        }
+                        else if (command == CMD_RS_MULTI) {
+                            RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
+                        }
                         hasMore = recordsSet.next();
                         recordsReturned++;
                     }
@@ -236,30 +244,6 @@ public class RemoteServer {
                     }
                     break;
                     
-                case CMD_RS_MULTI_RECORD_HASH:
-                    num = dis.readInt();
-                    now = 0;
-                    recordsReturned = 0;
-                    if (this.debug) {
-                        System.out.printf("Processing request for %s records\n", num);
-                        now = System.nanoTime();
-                    }
-                    hasMore = recordsSet.next();
-                    for (int i = 0; hasMore && i < num; i++) {
-                        dos.writeBoolean(true);
-                        RemoteUtils.sendKey(recordsSet.getKey(), dos);
-                        RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos);
-                        hasMore = recordsSet.next();
-                        recordsReturned++;
-                    }
-                    if (!hasMore) {
-                        dos.writeBoolean(false);
-                    }
-                    if (this.debug) {
-                        long time = System.nanoTime() - now;
-                        System.out.printf("Finished processing request for %,d records in %,dus (%,d returned)\n", num, time/1000, recordsReturned);
-                    }
-                    break;
                 case CMD_RS_NEXT:
                     now = 0;
                     if (this.debug) {

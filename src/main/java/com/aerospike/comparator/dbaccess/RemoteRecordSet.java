@@ -5,18 +5,19 @@ import java.io.IOException;
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
+import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 
 public class RemoteRecordSet implements RecordSetAccess {
     private final ConnectionPool pool;
     private final Connection connection;
     private final CachedRecordSet cachedRecordSet;
     
-    public RemoteRecordSet(ConnectionPool pool, Connection connection, int cacheSize, boolean storeHashes) {
+    public RemoteRecordSet(ConnectionPool pool, Connection connection, int cacheSize, boolean storeHashes, CompareMode compareMode) {
         super();
         this.pool = pool;
         this.connection = connection;
         if (cacheSize >= 4) {
-            this.cachedRecordSet = new CachedRecordSet(cacheSize, connection, storeHashes);
+            this.cachedRecordSet = new CachedRecordSet(cacheSize, connection, storeHashes, compareMode);
         }
         else {
             this.cachedRecordSet = null;

@@ -19,13 +19,12 @@ import java.util.stream.IntStream;
 
 import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.AerospikeException;
-import com.aerospike.client.AerospikeException.InvalidNode;
-import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.Host;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.ResultCode;
+import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.exp.Exp;
 import com.aerospike.client.exp.Expression;
 import com.aerospike.client.policy.ClientPolicy;
@@ -40,9 +39,6 @@ import com.aerospike.comparator.dbaccess.LocalAerospikeClient;
 import com.aerospike.comparator.dbaccess.RecordSetAccess;
 import com.aerospike.comparator.dbaccess.RemoteAerospikeClient;
 import com.aerospike.comparator.dbaccess.RemoteServer;
-import com.aerospike.comparator.dbaccess.RemoteUtils;
-
-import gnu.crypto.hash.RipeMD160;
 
 public class ClusterComparator {
 
@@ -157,7 +153,8 @@ public class ClusterComparator {
                     System.out.printf("Remote cluster %d: hosts: %s tlsPolicy: %s\n", 
                             side.value, hostNames, tlsPolicyAsString(clientPolicy.tlsPolicy));
                 }
-                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, options.getRemoteCacheSize(), clientPolicy.tlsPolicy, options.isRemoteServerHashes());
+                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, options.getRemoteCacheSize(), 
+                        clientPolicy.tlsPolicy, options.isRemoteServerHashes(), options.getCompareMode());
             }
             catch (IOException ioe) {
                 throw new AerospikeException(ioe);
@@ -361,7 +358,7 @@ public class ClusterComparator {
                 else {
                     if (options.isRecordLevelCompare()) {
                         DifferenceSet compareResult = null;
-                        if (client1.isLocal() && client2.isLocal()) {
+                        if ((client1.isLocal() && client2.isLocal()) || !options.isRemoteServerHashes()) {
                             Record record1 = recordSet1.getRecord();
                             Record record2 = recordSet2.getRecord();
                             compareResult = comparator.compare(key1, record1, record2,

@@ -6,6 +6,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
+import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 
 public class CachedRecordSet {
     private static class Entry {
@@ -14,6 +15,11 @@ public class CachedRecordSet {
         byte[] recordHash;
         Key key;
         
+        public Entry(boolean hasNext, Key key) {
+            this.hasNext = hasNext;
+            this.record = null;
+            this.key = key;
+        }
         public Entry(boolean hasNext, Key key, Record record) {
             this.hasNext = hasNext;
             this.record = record;
@@ -49,12 +55,14 @@ public class CachedRecordSet {
     private final Object lock = new Object();
     private final Connection connection;
     private final boolean storeHashes;
+    private final CompareMode compareMode;
     
-    public CachedRecordSet(final int cacheSize, final Connection connection, final boolean storeHashes) {
+    public CachedRecordSet(final int cacheSize, final Connection connection, final boolean storeHashes, final CompareMode compareMode) {
         this.cacheSize = cacheSize;
         this.connection = connection;
         this.queue = new ArrayBlockingQueue<>(cacheSize);
         this.storeHashes = storeHashes;
+        this.compareMode = compareMode;
         this.fillingThread = new Thread(() -> {
             try {
                 this.isFinished = !readMulti(cacheSize, connection);
@@ -62,7 +70,7 @@ public class CachedRecordSet {
                     synchronized(lock) {
                         // There's a tiny window where we could miss the notification 
                         // and worst case enter a deadlock situation. So wait 50ms then wake up
-                        // and check the queu again.
+                        // and check the queue again.
                         lock.wait(50);
                     }
                     if (close) {
@@ -87,7 +95,17 @@ public class CachedRecordSet {
     
     private boolean readMulti(int size, Connection connection) throws IOException, InterruptedException {
         isFilling = true;
-        connection.getDos().write(storeHashes ? RemoteServer.CMD_RS_MULTI_RECORD_HASH : RemoteServer.CMD_RS_MULTI);
+        int command;
+        if (CompareMode.MISSING_RECORDS == this.compareMode) {
+            command = RemoteServer.CMD_RS_MULTI_KEY_ONLY;
+        }
+        else if (storeHashes) {
+            command = RemoteServer.CMD_RS_MULTI_RECORD_HASH;
+        }
+        else  {
+            command = RemoteServer.CMD_RS_MULTI;
+        }
+        connection.getDos().write(command);
         connection.getDos().writeInt(size);
         boolean hasMore = true;
         for (int i = 0; i < size && !close; i++) {
@@ -98,7 +116,13 @@ public class CachedRecordSet {
                 break;
             }
             else {
-                if (storeHashes) {
+                if (command == RemoteServer.CMD_RS_MULTI_KEY_ONLY) {
+                    // Missing records mode requires only keys
+                    this.queue.put(new Entry(
+                            true,
+                            RemoteUtils.readKey(connection.getDis())));
+                }
+                else if (command == RemoteServer.CMD_RS_MULTI_RECORD_HASH) {
                     this.queue.put(new Entry(
                             true,
                             RemoteUtils.readKey(connection.getDis()),
@@ -109,7 +133,6 @@ public class CachedRecordSet {
                             true,
                             RemoteUtils.readKey(connection.getDis()),
                             RemoteUtils.readRecord(connection.getDis())));
-
                 }
             }
         }

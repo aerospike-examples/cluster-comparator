@@ -1,7 +1,6 @@
 package com.aerospike.comparator.dbaccess;
 
 import java.io.IOException;
-import java.security.cert.CertificateParsingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,17 +15,20 @@ import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
+import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 
 public class RemoteAerospikeClient implements AerospikeClientAccess {
 
     private final ConnectionPool pool;
     private final int cacheSize;
     private final boolean useHashes;
+    private final CompareMode compareMode;
     
-    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, int cacheSize, TlsPolicy tlsPolicy, boolean useHashes) throws IOException {
+    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, int cacheSize, TlsPolicy tlsPolicy, boolean useHashes, CompareMode compareMode) throws IOException {
         this.pool = new ConnectionPool(host, port, defaultPoolSize, tlsPolicy);
         this.cacheSize = cacheSize;
         this.useHashes = useHashes;
+        this.compareMode = compareMode;
     }
     
     @Override
@@ -114,7 +116,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDos().writeInt(filter.getCount());
             conn.getDis().readUTF();    // Getting this back means the server is ready.
             // We keep hold of this connection until the recordset is closed, which simplifies the back-and-forth
-            return new RemoteRecordSet(pool, conn, this.cacheSize, useHashes);
+            return new RemoteRecordSet(pool, conn, this.cacheSize, useHashes, compareMode);
         }
         catch (IOException ioe) {
             RemoteUtils.handleIOException(ioe);
