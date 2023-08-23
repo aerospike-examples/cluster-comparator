@@ -205,6 +205,11 @@ public class RemoteServer {
             
             int begin = dis.readInt();
             int count = dis.readInt();
+            
+            if (debug) {
+                System.out.printf("Starting query partition (%d, %d, %b, %d, %b)\n",
+                        begin, count, qp.includeBinData, qp.maxConcurrentNodes, qp.shortQuery);
+            }
             PartitionFilter partitionFilter = PartitionFilter.range(begin, count);
             RecordSetAccess recordsSet = client.queryPartitions(qp, stmt, partitionFilter);
             dos.writeUTF("Ready");
@@ -222,25 +227,24 @@ public class RemoteServer {
                         System.out.printf("Processing request for %s keys/records (%d)\n", num, command);
                         now = System.nanoTime();
                     }
-                    boolean hasMore = recordsSet.next();
+                    boolean hasMore = true;
                     for (int i = 0; hasMore && i < num; i++) {
-                        dos.writeBoolean(true);
-                        Key key = recordsSet.getKey();
-                        if (debug) {
-                            System.out.printf("Writing data for %s\n", key);
-                        }
-                        RemoteUtils.sendKey(key, dos);
-                        if (command == CMD_RS_MULTI_RECORD_HASH) {
-                            RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos);
-                        }
-                        else if (command == CMD_RS_MULTI) {
-                            RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
-                        }
                         hasMore = recordsSet.next();
-                        recordsReturned++;
-                    }
-                    if (!hasMore) {
-                        dos.writeBoolean(false);
+                        dos.writeBoolean(hasMore);
+                        if (hasMore) {
+                            Key key = recordsSet.getKey();
+                            if (debug) {
+                                System.out.printf("Sending data for %s\n", key);
+                            }
+                            RemoteUtils.sendKey(key, dos);
+                            if (command == CMD_RS_MULTI_RECORD_HASH) {
+                                RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos);
+                            }
+                            else if (command == CMD_RS_MULTI) {
+                                RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
+                            }
+                            recordsReturned++;
+                        }
                     }
                     if (this.debug) {
                         long time = System.nanoTime() - now;
@@ -304,6 +308,9 @@ public class RemoteServer {
                     break;
                     
                 case CMD_RS_CLOSE:
+                    if (this.debug) {
+                        System.out.println("Received close on record set, finishing partition");
+                    }
                     recordsSet.close();
                     done = true;
                     dos.writeInt(0);
@@ -357,6 +364,10 @@ public class RemoteServer {
                 try {
                     int command = dis.read();
                     switch (command) {
+                    case -1:
+                        // Connection no longer exists
+                        done = true;
+                        break;
                     case CMD_CLOSE:
                         done = true;
                         dos.writeInt(0);

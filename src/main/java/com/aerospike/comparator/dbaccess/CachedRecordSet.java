@@ -52,6 +52,7 @@ public class CachedRecordSet {
     private volatile boolean close = false;
     private volatile boolean isFilling = false;
     private volatile boolean isFinished = false;
+    private volatile boolean threadTerminated = false;
     private final Object lock = new Object();
     private final Connection connection;
     private final boolean storeHashes;
@@ -80,6 +81,8 @@ public class CachedRecordSet {
                         this.isFinished = !readMulti(queue.remainingCapacity(), connection);
                     }
                 }
+                connection.getDos().write(RemoteServer.CMD_RS_CLOSE);
+                connection.getDis().readInt();
             }
             catch (IOException ioe) {
                 RemoteUtils.handleIOException(ioe);
@@ -88,13 +91,17 @@ public class CachedRecordSet {
                 // TODO: Should we just ignore this?
                 // ie.printStackTrace();
             }
+            finally {
+                this.threadTerminated = true;
+            }
         });
         this.fillingThread.setDaemon(true);
+        this.fillingThread.setName("cache-filling-thread");
         this.fillingThread.start();
     }
     
     private boolean readMulti(int size, Connection connection) throws IOException, InterruptedException {
-        isFilling = true;
+        this.isFilling = true;
         int command;
         if (CompareMode.MISSING_RECORDS == this.compareMode) {
             command = RemoteServer.CMD_RS_MULTI_KEY_ONLY;
@@ -116,22 +123,20 @@ public class CachedRecordSet {
                 break;
             }
             else {
+                Key key = RemoteUtils.readKey(connection.getDis());
                 if (command == RemoteServer.CMD_RS_MULTI_KEY_ONLY) {
                     // Missing records mode requires only keys
                     this.queue.put(new Entry(
-                            true,
-                            RemoteUtils.readKey(connection.getDis())));
+                            true, key));
                 }
                 else if (command == RemoteServer.CMD_RS_MULTI_RECORD_HASH) {
                     this.queue.put(new Entry(
-                            true,
-                            RemoteUtils.readKey(connection.getDis()),
+                            true, key,
                             RemoteUtils.readRecordHash(connection.getDis())));
                 }
                 else {
                     this.queue.put(new Entry(
-                            true,
-                            RemoteUtils.readKey(connection.getDis()),
+                            true, key,
                             RemoteUtils.readRecord(connection.getDis())));
                 }
             }
@@ -187,13 +192,15 @@ public class CachedRecordSet {
     }
 
     public void close() throws IOException {
-        connection.getDos().write(RemoteServer.CMD_RS_CLOSE);
-        connection.getDis().readInt();
         this.close = true;
         this.fillingThread.interrupt();
-    }
-    
-    public boolean isStoreHashes() {
-        return storeHashes;
+        while (!this.threadTerminated) {
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        }
     }
 }
