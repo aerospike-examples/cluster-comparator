@@ -153,8 +153,7 @@ public class ClusterComparator {
                     System.out.printf("Remote cluster %d: hosts: %s tlsPolicy: %s\n", 
                             side.value, hostNames, tlsPolicyAsString(clientPolicy.tlsPolicy));
                 }
-                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, options.getRemoteCacheSize(), 
-                        clientPolicy.tlsPolicy, options.isRemoteServerHashes(), options.getCompareMode());
+                return new RemoteAerospikeClient(remoteHost[1], Integer.valueOf(remoteHost[2]), this.threadsToUse, clientPolicy.tlsPolicy, options);
             }
             catch (IOException ioe) {
                 throw new AerospikeException(ioe);
@@ -366,8 +365,8 @@ public class ClusterComparator {
                                     options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
                         }
                         else {
-                            byte[] record1hash = recordSet1.getRecordHash();
-                            byte[] record2hash = recordSet2.getRecordHash();
+                            byte[] record1hash = recordSet1.getRecordHash(options.isSortMaps());
+                            byte[] record2hash = recordSet2.getRecordHash(options.isSortMaps());
                             int recordsEqual = compare(record1hash, record2hash);
                             if (recordsEqual != 0) {
                                 if (options.getCompareMode() == CompareMode.RECORDS_DIFFERENT) {
@@ -641,6 +640,9 @@ public class ClusterComparator {
     }
     
     public DifferenceSummary begin() throws Exception {
+        if (!options.isSilent()) {
+            System.out.printf("=== Aerospike Cluster Comparator v%s ===\n", this.getClass().getPackage().getImplementationVersion());
+        }
         if (options.isRemoteServer()) {
             startRemoteServer();
             return null;

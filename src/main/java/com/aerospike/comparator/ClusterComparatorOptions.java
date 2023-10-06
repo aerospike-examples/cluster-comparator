@@ -87,6 +87,7 @@ public class ClusterComparatorOptions {
     private boolean remoteServerHashes = true;
     private boolean verbose = false;
     private boolean debug = false;
+    private boolean sortMaps = false;
     
     private static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -416,6 +417,12 @@ public class ClusterComparatorOptions {
                 + "efficient if you are finding record level differences and there are a lot of mismatching records.");
         options.addOption("V", "verbose", false, "Turn on verbose logging, especially for cluster details and TLS connections");
         options.addOption("D", "debug", false, "Turn on debug mode. This will output a lot of information and automatically turn on verbose mode and turn silent mode off");
+        options.addOption("sm", "sortMaps", true, "Sort maps. If using hashes to compare a local cluster with a remote cluster and the order in the maps is different, the hashes will be different. "
+                + "This can lead to false positives, especially when using RECORDS_DIFFERENT which relies on the hashes being accurate. RECORD_DIFFERENCES mode is not susceptible to this as it "
+                + "first compares hashes and if they're different will transfer the whole record and find any differences. Hence if the hash is wrong due to order differences but the contents are "
+                + "identical, no record will be flagged in this mode. This flag will cause more CPU usage on both the remote comparator and the main comparator but will make sure the hashes are "
+                + "consistent irrespective of the underlying order of any maps. This flag only makes sense to set when using a remote comparator, especially with RECORDS_DIFFERENT mode. Default is false,"
+                + "unless using a remote server with RECORDS_DIFFERENT mode and remoteServerHashes set to true.");
         
         return options;
     }
@@ -573,6 +580,12 @@ public class ClusterComparatorOptions {
         if (this.debug) {
             this.silent = false;
             this.verbose = true;
+        }
+        if (cl.hasOption("sortMaps")) {
+            this.sortMaps = Boolean.valueOf(cl.getOptionValue("sortMaps"));
+        }
+        else {
+            this.sortMaps = (this.compareMode == CompareMode.RECORDS_DIFFERENT) && this.isRemoteServerHashes();
         }
         if (this.compareMode == CompareMode.QUICK_NAMESPACE && this.remoteCacheSize >= 4) {
             System.out.println("Remote caching is incompatible with QUICK_NAMESPACE mode, turning off caching.");
@@ -751,6 +764,10 @@ public class ClusterComparatorOptions {
     
     public boolean isDebug() {
         return debug;
+    }
+    
+    public boolean isSortMaps() {
+        return sortMaps;
     }
 }
 

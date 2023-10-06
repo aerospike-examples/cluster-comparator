@@ -8,7 +8,14 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.AerospikeException.InvalidNode;
@@ -20,6 +27,7 @@ import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.command.ParticleType;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.Replica;
+import com.aerospike.comparator.AerospikeComparator;
 
 import gnu.crypto.hash.RipeMD160;
 
@@ -153,7 +161,7 @@ public class RemoteUtils {
         }
     }
     
-    public static void sendRecordHash(Record record, DataOutputStream dos) throws IOException{
+    public static void sendRecordHash(Record record, DataOutputStream dos, boolean sortMaps) throws IOException{
         if (record == null) {
             dos.writeBoolean(false);
         }
@@ -161,7 +169,7 @@ public class RemoteUtils {
             dos.writeBoolean(true);
             dos.writeInt(record.expiration);
             dos.writeInt(record.generation);
-            byte[] hash = getRecordHash(record);
+            byte[] hash = getRecordHash(record, sortMaps);
             dos.writeInt(hash.length);
             dos.write(hash);
         }
@@ -190,10 +198,10 @@ public class RemoteUtils {
         clusterUtils.printInfo(true);
     }
     
-    public static byte[] getRecordHash(Record record) {
+    private static byte[] getHash(Object object) {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
                 ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-            oos.writeObject(record.bins);
+            oos.writeObject(object);
             bos.flush();
             byte[] bytes = bos.toByteArray();
             
@@ -203,6 +211,66 @@ public class RemoteUtils {
         }
         catch (IOException ioe) {
             throw new AerospikeException(ioe);
+        }
+    }
+    
+    private static List<Object> sortToAerospikeOrder(Collection<Object> objects, AerospikeComparator comparator) {
+        List<Object> result = new ArrayList<>(objects);
+        Collections.sort(result, comparator);
+        return result;
+    }
+    
+    private static Object turnAnyMapsToLists(Object object, AerospikeComparator comparator) {
+        if (object instanceof Map) {
+            return turnMapToKeySortedList((Map<?, ?>) object, comparator);
+        }
+        else if (object instanceof List) {
+            List<Object> list = (List<Object>)object;
+            for (int i = 0; i < list.size(); i++) {
+                Object obj = list.get(i);
+                Object newObj = turnAnyMapsToLists(obj, comparator);
+                // deliberately compare object references
+                if (obj != newObj) {
+                    list.set(i, newObj);
+                }
+            }
+        }
+        return object;
+    }
+    
+    private static List<Entry<?, ?>> turnMapToKeySortedList(Map<?, ?> map, AerospikeComparator comparator) {
+        List<?> sortedKeys = new ArrayList<Object>(map.keySet());
+        Collections.sort(sortedKeys, comparator);
+        List<Entry<?, ?>> mapAsList = new ArrayList<>();
+        for (Object key : sortedKeys ) {
+            Object newKey = turnAnyMapsToLists(key, comparator);
+            Object newValue = turnAnyMapsToLists(map.get(key), comparator);
+            mapAsList.add(new SimpleEntry<>(newKey, newValue));
+        }
+        return mapAsList; 
+    }
+    
+    private static byte[] getMapHash(Map<?, ?> map) {
+        List<Entry<?, ?>> list = turnMapToKeySortedList(map, new AerospikeComparator());
+        return getHash(list);
+    }
+    
+    /**
+     * Return a hash representing the record. This has is 20 bytes of random noise computed by <code>RIPEMD160</code>
+     * hashing algorithm. Whilst this is not guaranteed to be unique, the probability of 2 hashes colliding is ~1 in 1e48
+     * so is effectively zero.
+     * <p/>
+     * Note that we cannot just blindly hash the record. Maps (including the record bins) should be order independent,
+     * resulting in extra work.
+     * @param record
+     * @return The hash of the passed record.
+     */
+    public static byte[] getRecordHash(Record record, boolean sortMaps) {
+        if (sortMaps) {
+            return getMapHash(record.bins);
+        }
+        else {
+            return getHash(record.bins);
         }
     }
     

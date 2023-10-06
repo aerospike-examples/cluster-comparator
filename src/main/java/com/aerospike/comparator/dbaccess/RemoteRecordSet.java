@@ -67,7 +67,7 @@ public class RemoteRecordSet implements RecordSetAccess {
     }
 
     @Override
-    public byte[] getRecordHash() {
+    public byte[] getRecordHash(boolean sortMaps) {
         if (cachedRecordSet != null) {
             return cachedRecordSet.getRecordHash();
         }

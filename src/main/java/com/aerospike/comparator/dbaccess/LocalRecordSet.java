@@ -41,7 +41,7 @@ public class LocalRecordSet implements RecordSetAccess {
     }
     
     @Override
-    public byte[] getRecordHash() {
-        return RemoteUtils.getRecordHash(this.getRecord());
+    public byte[] getRecordHash(boolean sortMaps) {
+        return RemoteUtils.getRecordHash(this.getRecord(), sortMaps);
     }
 }

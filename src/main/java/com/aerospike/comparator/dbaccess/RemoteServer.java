@@ -38,6 +38,7 @@ public class RemoteServer {
     public static final int CMD_RS_RECORD_HASH = 13;
     public static final int CMD_RS_MULTI_RECORD_HASH = 14;
     public static final int CMD_RS_MULTI_KEY_ONLY = 15;
+    public static final int CMD_CONFIG = 16;
     
     private final boolean debug;
     private final boolean verbose;
@@ -60,39 +61,46 @@ public class RemoteServer {
             try {
                 serverSocket = new ServerSocket(heartbeatPort);
                 System.out.printf("Server heartbeat listening on port %d\n", heartbeatPort);
+                while (true) {
+                    Socket socket = null;
+                    DataInputStream dis = null;
+                    DataOutputStream dos = null;
+                    try {
+                        socket = serverSocket.accept();
+                        dis = new DataInputStream(socket.getInputStream());
+                        dos = new DataOutputStream(socket.getOutputStream());
+                        while (true) {
+                            byte b = dis.readByte();
+                            dos.writeByte(b);
+                        }
+                    }
+                    catch (IOException ioe) {
+                        if (dis != null) {
+                            try {
+                                dis.close();
+                            } catch (IOException ignored) {}
+                        }
+                        if (dos != null) {
+                            try {
+                                dos.close();
+                            } catch (IOException ignored) {}
+                        }
+                        if (socket != null) {
+                            try {
+                                socket.close();
+                            } catch (IOException ignored) {}
+                        }
+                    }
+                }
             }
             catch (IOException ioe) {
                 System.err.printf("Error creating heartbeat socket on port %d\n", heartbeatPort);
             }
-            while (true) {
-                Socket socket = null;
-                DataInputStream dis = null;
-                DataOutputStream dos = null;
-                try {
-                    socket = serverSocket.accept();
-                    dis = new DataInputStream(socket.getInputStream());
-                    dos = new DataOutputStream(socket.getOutputStream());
-                    while (true) {
-                        byte b = dis.readByte();
-                        dos.writeByte(b);
-                    }
-                }
-                catch (IOException ioe) {
-                    if (dis != null) {
-                        try {
-                            dis.close();
-                        } catch (IOException ignored) {}
-                    }
-                    if (dos != null) {
-                        try {
-                            dos.close();
-                        } catch (IOException ignored) {}
-                    }
-                    if (socket != null) {
-                        try {
-                            socket.close();
-                        } catch (IOException ignored) {}
-                    }
+            finally {
+                if (serverSocket != null) {
+                    try {
+                        serverSocket.close();
+                    } catch (IOException ignored) {}
                 }
             }
         });
@@ -175,6 +183,7 @@ public class RemoteServer {
         private final DataOutputStream dos;
         private final Socket socket;
         private final boolean debug;
+        private static volatile boolean sortMaps = false;
         
         public SocketHandler(Socket socket, AerospikeClientAccess client, boolean debug) throws IOException {
             this.client = client;
@@ -238,7 +247,7 @@ public class RemoteServer {
                             }
                             RemoteUtils.sendKey(key, dos);
                             if (command == CMD_RS_MULTI_RECORD_HASH) {
-                                RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos);
+                                RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos, sortMaps);
                             }
                             else if (command == CMD_RS_MULTI) {
                                 RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
@@ -300,7 +309,7 @@ public class RemoteServer {
                         now = System.nanoTime();
                     }
                     record = recordsSet.getRecord();
-                    RemoteUtils.sendRecordHash(record, dos);
+                    RemoteUtils.sendRecordHash(record, dos, sortMaps);
                     if (this.debug) {
                         long time = System.nanoTime() - now;
                         System.out.printf("Finished processing request for record in %,dus\n", time/1000);
@@ -318,6 +327,10 @@ public class RemoteServer {
             }
         }
         
+        private void doConfig() throws IOException {
+            sortMaps = dis.readBoolean();
+            dos.writeInt(0);
+        }
         private void doTouch() throws IOException {
             WritePolicy policy = new WritePolicy();
             policy = (WritePolicy) RemoteUtils.readPolicy(policy, dis);
@@ -368,6 +381,10 @@ public class RemoteServer {
                         // Connection no longer exists
                         done = true;
                         break;
+                    case CMD_CONFIG:
+                        doConfig();
+                        break;
+                        
                     case CMD_CLOSE:
                         done = true;
                         dos.writeInt(0);

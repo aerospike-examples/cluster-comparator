@@ -7,6 +7,6 @@ public interface RecordSetAccess {
     boolean next();
     Key getKey();
     Record getRecord();
-    byte[] getRecordHash();
+    byte[] getRecordHash(boolean sortMaps);
     void close();
 }

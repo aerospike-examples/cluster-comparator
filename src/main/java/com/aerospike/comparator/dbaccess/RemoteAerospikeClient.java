@@ -15,6 +15,7 @@ import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
+import com.aerospike.comparator.ClusterComparatorOptions;
 import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 
 public class RemoteAerospikeClient implements AerospikeClientAccess {
@@ -24,11 +25,31 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
     private final boolean useHashes;
     private final CompareMode compareMode;
     
-    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, int cacheSize, TlsPolicy tlsPolicy, boolean useHashes, CompareMode compareMode) throws IOException {
+    public RemoteAerospikeClient(String host, int port, int defaultPoolSize, TlsPolicy tlsPolicy, ClusterComparatorOptions options) throws IOException {
         this.pool = new ConnectionPool(host, port, defaultPoolSize, tlsPolicy);
-        this.cacheSize = cacheSize;
-        this.useHashes = useHashes;
-        this.compareMode = compareMode;
+        this.cacheSize = options.getRemoteCacheSize();
+        this.useHashes = options.isRemoteServerHashes();
+        this.compareMode = options.getCompareMode();
+        
+        sendOptionsToServer(options);
+    }
+    
+    private void sendOptionsToServer(ClusterComparatorOptions options) {
+        Connection conn = null;
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_CONFIG);
+            conn.getDos().writeBoolean(options.isSortMaps());
+            conn.getDis().readInt();
+        }
+        catch (IOException ioe) {
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
+        }
     }
     
     @Override
