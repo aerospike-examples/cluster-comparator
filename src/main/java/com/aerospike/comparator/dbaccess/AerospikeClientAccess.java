@@ -15,6 +15,7 @@ public interface AerospikeClientAccess {
     boolean isLocal();
     void close();
     void touch(WritePolicy policy, Key key);
+    boolean exists(WritePolicy policy, Key key);
     Record get(Policy policy, Key key);
     RecordSetAccess queryPartitions(QueryPolicy queryPolicy, Statement statement, PartitionFilter filter);
     

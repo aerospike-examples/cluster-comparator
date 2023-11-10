@@ -33,12 +33,26 @@ import nl.altindag.ssl.pem.util.PemUtils;
 public class ClusterComparatorOptions {
     private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-hh:mm:ssZ";
     public static enum Action {
-        SCAN,
-        TOUCH,
-        READ,
-        SCAN_TOUCH,
-        SCAN_ASK,
-        SCAN_READ
+        SCAN(false, true),
+        TOUCH(true, false),
+        READ(true, false),
+        RERUN(true, true),
+        SCAN_TOUCH(false, true),
+        SCAN_ASK(false, true),
+        SCAN_READ(false, true);
+        
+        private final boolean needsInputFile;
+        private final boolean canUseOutputFile;
+        private Action(boolean needsInputFile, boolean canUseOutputFile) {
+            this.needsInputFile = needsInputFile;
+            this.canUseOutputFile = canUseOutputFile;
+        }
+        public boolean needsInputFile() {
+            return this.needsInputFile;
+        }
+        public boolean canUseOutputFile() {
+            return this.canUseOutputFile;
+        }
     }
     
     public static enum CompareMode {
@@ -56,7 +70,8 @@ public class ClusterComparatorOptions {
     private int endPartition = 4096;
     private String[] namespaces;
     private String[] setNames;
-    private String fileName;
+    private String outputFileName;
+    private String inputFileName;
     private Action action;
     private int rps;
     private String clusterName1;
@@ -345,7 +360,7 @@ public class ClusterComparatorOptions {
         options.addOption("u", "usage", false, "Display the usage and exit.");
         options.addOption("a", "action", true, "Action to take. Options are: 'scan' (scan for differences), 'touch' (touch the records specified in the file), 'read' (read the records in specified file), "
                 + ", 'scan_touch' (scan for differences, if any differences then automatically touch the records), 'scan_read' (scan for differences, if any differences then automatically read the record), "
-                + "'scan_ask' (scan for differences, if any differences then prompt the user "
+                + "'scan_ask' (scan for differences, if any differences then prompt the user, 'rerun' (read all the records from the previous run and see if they're still different. Requires an input file)"
                 + "as to whether to touch or read the records or not. Every options besides 'scan' MUST specify the 'file' option too. (Default: scan)");
         options.addOption("c", "console", false, "Output differences to the console. 'quiet' flag does not affect what is output. Can be used in conjunction with 'file' flag for dual output");
         options.addOption("l", "limit", true, "Limit the number of differences to the passed value. Pass 0 for unlimited. (Default: 0)");
@@ -423,7 +438,8 @@ public class ClusterComparatorOptions {
                 + "identical, no record will be flagged in this mode. This flag will cause more CPU usage on both the remote comparator and the main comparator but will make sure the hashes are "
                 + "consistent irrespective of the underlying order of any maps. This flag only makes sense to set when using a remote comparator, especially with RECORDS_DIFFERENT mode. Default is false,"
                 + "unless using a remote server with RECORDS_DIFFERENT mode and remoteServerHashes set to true.");
-        
+        options.addOption("i", "inputFile", true, "Specify an input file for records to compare. This is only used with the RERUN, READ and TOUCH actions and is "
+                + "typically set to the output file of a previous run.");
         return options;
     }
 
@@ -463,8 +479,11 @@ public class ClusterComparatorOptions {
             else if (this.namespaces == null || this.namespaces.length == 0) {
                 System.out.println("namespace(s) must be specified");
             }
-            else if ((this.action == Action.SCAN_ASK || this.action == Action.TOUCH || this.action == Action.READ) && this.fileName == null) {
+            else if ((this.action == Action.SCAN_ASK || this.action == Action.TOUCH || this.action == Action.READ || this.action == Action.RERUN) && this.outputFileName == null) {
                 System.out.println("If action is not 'scan' or 'scan_touch' or 'scan_read', the fileName must also be specified");
+            }
+            else if (this.action == Action.RERUN && this.compareMode == CompareMode.QUICK_NAMESPACE) {
+                System.out.println("Re-running is not supported for QUICK_NAMESPACE compare mode");
             }
             else if (this.rps < 0) {
                 System.out.println("RPS must be >= 0, not " + this.rps);
@@ -487,8 +506,17 @@ public class ClusterComparatorOptions {
             else if ((this.endDate != null || this.beginDate != null) && this.isQuickCompare()) {
                 System.out.println("Date ranges for the scans cannot be used with quick compare");
             }
+            else if (this.action.needsInputFile && this.inputFileName == null) {
+                System.out.printf("Action %s requires an input file but none was provided.\n", this.action);
+            }
             else {
                 valid = true;
+            }
+            if (this.action == Action.RERUN && remoteCacheSize > 0) {
+                System.out.println("Disabling caching from remote server when using RERUN as the action.");
+            }
+            if (!this.action.canUseOutputFile && this.outputFileName != null) {
+                System.out.printf("Action %s cannot use an output file, but one was provided. Ignoring and continuing.\n", this.action);
             }
         }
         if (!valid) {
@@ -515,7 +543,8 @@ public class ClusterComparatorOptions {
         if (cl.hasOption("setNames")) {
             this.setNames = cl.getOptionValue("setNames").split(",");
         }
-        this.fileName = cl.getOptionValue("file");
+        this.outputFileName = cl.getOptionValue("file");
+        this.inputFileName = cl.getOptionValue("inputFile");
         this.action = Action.valueOf(cl.getOptionValue("action", "scan").toUpperCase());
         this.rps = Integer.valueOf(cl.getOptionValue("rps","0"));
         this.hosts1 = cl.getOptionValue("hosts1");
@@ -619,8 +648,8 @@ public class ClusterComparatorOptions {
         return setNames;
     }
 
-    public String getFileName() {
-        return fileName;
+    public String getOutputFileName() {
+        return outputFileName;
     }
 
     public Action getAction() {
@@ -768,6 +797,10 @@ public class ClusterComparatorOptions {
     
     public boolean isSortMaps() {
         return sortMaps;
+    }
+    
+    public String getInputFileName() {
+        return inputFileName;
     }
 }
 

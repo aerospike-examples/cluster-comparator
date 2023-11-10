@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Scanner;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +26,7 @@ import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.ResultCode;
 import com.aerospike.client.cluster.ClusterUtilities;
+import com.aerospike.client.cluster.Partition;
 import com.aerospike.client.exp.Exp;
 import com.aerospike.client.exp.Expression;
 import com.aerospike.client.policy.ClientPolicy;
@@ -57,6 +59,7 @@ public class ClusterComparator {
     private final AtomicLong recordsDifferentCount = new AtomicLong();
     private final AtomicLong totalMissingRecords = new AtomicLong();
     private final AtomicLong totalRecordsCompared = new AtomicLong();
+    private final AtomicLong recordsRemaining = new AtomicLong();
     
     private ExecutorService executor = null;
     private AtomicInteger activeThreads;
@@ -107,8 +110,8 @@ public class ClusterComparator {
             this.missingRecordHandlers.add(consoleHandler);
             this.recordDifferenceHandlers.add(consoleHandler);
         }
-        if (options.getFileName() != null && options.getAction() != Action.TOUCH && options.getAction() != Action.READ) {
-            CsvDifferenceHandler csvHandler = new CsvDifferenceHandler(options.getFileName());
+        if (options.getOutputFileName() != null && options.getAction() != Action.TOUCH && options.getAction() != Action.READ ) {
+            CsvDifferenceHandler csvHandler = new CsvDifferenceHandler(options.getOutputFileName());
             this.missingRecordHandlers.add(csvHandler);
             this.recordDifferenceHandlers.add(csvHandler);
         }
@@ -400,16 +403,127 @@ public class ClusterComparator {
         }
     }
 
-    private void beginComparison(AerospikeClientAccess client1, AerospikeClientAccess client2, String namespace, String setName) throws InterruptedException {
-        recordsCluster1Processed.set(0);
-        recordsCluster2Processed.set(0);
-        missingRecordsCluster1.set(0);
-        missingRecordsCluster2.set(0);
+    /**
+     * The PartitionCompareRunner is used to compare a set of partitions. The partitions used are specified in the partitionList variable 
+     * @author tfaulkes
+     */
+    private class PartitionCompareRunner implements Runnable {
+        private final AerospikeClientAccess client1;
+        private final AerospikeClientAccess client2;
+        private final String namespace;
+        private final String setName;
+        
+        public PartitionCompareRunner(AerospikeClientAccess client1, AerospikeClientAccess client2, String namespace, String setName) {
+            super();
+            this.client1 = client1;
+            this.client2 = client2;
+            this.namespace = namespace;
+            this.setName = setName;
+        }
 
-        List<Integer> partitionsToCompare; 
+        public void run() {
+            boolean done = false;
+            try {
+                while (!done && !forceTerminate) {
+                    int partitionId;
+                    synchronized (partitionList) {
+                        if (partitionList.isEmpty()) {
+                            done = true;
+                            partitionId = -1;
+                        }
+                        else {
+                            partitionId = partitionList.remove(0);
+                        }
+                    }
+                    if (!done) {
+                        comparePartition(client1, client2, namespace, setName, partitionId);
+                    }
+                }
+            }
+            finally {
+                activeThreads.decrementAndGet();
+            }
+        }
+    }
+    
+    /**
+     * The FixedRecordsCompareRunner is used to compare a set of records which are not necessarily in the same partition. This is 
+     * used when loading the records from an input file such as the output of a previous run for example. 
+     * @author tfaulkes
+     */
+    private class FixedRecordsCompareRunner implements Runnable {
+        private final AerospikeClientAccess client1;
+        private final AerospikeClientAccess client2;
+        private final FileLoadingProcessor processor;
+        
+        public FixedRecordsCompareRunner(AerospikeClientAccess client1, AerospikeClientAccess client2, FileLoadingProcessor processor) {
+            super();
+            this.client1 = client1;
+            this.client2 = client2;
+            this.processor = processor;
+        }
+
+        public void run() {
+            try {
+                RecordComparator comparator = new RecordComparator();
+
+                while (!processor.isDone() && !forceTerminate) {
+                    
+                    FileLine line = processor.get();
+                    if (line == null) {
+                        break;
+                    }
+                    Key key = line.getKey();
+                    int partId = Partition.getPartitionId(key.digest);
+                    if (options.getCompareMode() == CompareMode.MISSING_RECORDS) {
+                        boolean side1 = client1.exists(null, key);
+                        boolean side2 = client2.exists(null, key);
+                        if (side1 && !side2) {
+                            missingRecord(client1, partId, key, Side.SIDE_2);
+                        }
+                        else if (!side1 && side2) {
+                            missingRecord(client2, partId, key, Side.SIDE_1);
+                        }
+                    }
+                    else {
+                        // This must be a record level compare
+                        DifferenceSet compareResult = null;
+                        Record record1 = client1.get(null, key);
+                        Record record2 = client2.get(null, key);
+                        if (record1 == null && record2 != null) {
+                            missingRecord(client2, partId, key, Side.SIDE_1);
+                        }
+                        else if (record1 != null && record2 == null) {
+                            missingRecord(client1, partId, key, Side.SIDE_2);
+                        }
+                        else {
+                            compareResult = comparator.compare(key, record1, record2,
+                                    options.getPathOptions(),
+                                    options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
+                            if (compareResult != null && compareResult.areDifferent()) {
+                                differentRecords(partId, key, null, null, compareResult);
+                            }
+                            if (options.getRecordCompareLimit() > 0 && totalRecordsCompared.incrementAndGet() >= options.getRecordCompareLimit()) {
+                                forceTerminate = true;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (InterruptedException ie) {
+                // ignored
+            }
+            finally {
+                activeThreads.decrementAndGet();
+            }
+        }
+    }
+    
+    private void beginComparison(AerospikeClientAccess client1, AerospikeClientAccess client2, String namespace, String setName) throws InterruptedException {
+        Runnable runner = null;
         if (options.isQuickCompare()) {
             try {
-                partitionsToCompare = quickCompare(client1, client2, namespace);
+                List<Integer> partitionsToCompare = quickCompare(client1, client2, namespace);
                 if (!options.isSilent()) {
                     if (partitionsToCompare.size() <= 20) {
                         System.out.printf("Quick compare found %d partitions different: %s\n", partitionsToCompare.size(), partitionsToCompare);
@@ -433,57 +547,48 @@ public class ClusterComparator {
                 return;
             }
         }
+        else if (options.getAction() == Action.RERUN) {
+            runner = new FixedRecordsCompareRunner(client1, client2, new FileLoadingProcessor());
+        }
         else {
-            partitionsToCompare = IntStream.range(startPartition, endPartition).boxed().collect(Collectors.toList());
+            this.partitionList = IntStream.range(startPartition, endPartition).boxed().collect(Collectors.toList());
+            runner = new PartitionCompareRunner(client1, client2, namespace, setName);
         }
         
-        this.partitionList = partitionsToCompare;
         this.executor = Executors.newFixedThreadPool(threadsToUse);
         this.activeThreads = new AtomicInteger(threadsToUse);
         for (int i = 0; i < threadsToUse; i++) {
-            this.executor.execute(() -> {
-                boolean done = false;
-                try {
-                    while (!done && !forceTerminate) {
-                        int partitionId;
-                        synchronized (partitionList) {
-                            if (partitionList.isEmpty()) {
-                                done = true;
-                                partitionId = -1;
-                            }
-                            else {
-                                partitionId = partitionList.remove(0);
-                            }
-                        }
-                        if (!done) {
-                            comparePartition(client1, client2, namespace, setName, partitionId);
-                        }
-                    }
-                }
-                finally {
-                    this.activeThreads.decrementAndGet();
-                }
-            });
+            this.executor.execute(runner);
         }
         this.executor.shutdown();
         this.monitorProgress(namespace, setName);
     }
     
-    private void beginComparisons(AerospikeClientAccess client1, AerospikeClientAccess client2) throws InterruptedException {
+    private void performComparisons(AerospikeClientAccess client1, AerospikeClientAccess client2) throws InterruptedException {
         this.filterExpresion = formFilterExpression();
+        recordsCluster1Processed.set(0);
+        recordsCluster2Processed.set(0);
+        missingRecordsCluster1.set(0);
+        missingRecordsCluster2.set(0);
 
         if (options.isMetadataCompare()) {
             MetadataComparator metadataComparator = new MetadataComparator(options);
             DifferenceSet result = metadataComparator.compareMetaData(client1, client2);
+            // TODO: Should the result be used in the summary?
         }
-        for (String namespace : options.getNamespaces()) {
-            String[] sets = options.getSetNames();
-            if (sets == null || sets.length == 0) {
-                beginComparison(client1, client2, namespace, null);
-            }
-            else {
-                for (String thisSet : sets) {
-                    beginComparison(client1, client2, namespace, thisSet);
+        if (options.getAction() == Action.RERUN) {
+            beginComparison(client1, client2, null, null);
+        }
+        else {
+            for (String namespace : options.getNamespaces()) {
+                String[] sets = options.getSetNames();
+                if (sets == null || sets.length == 0) {
+                    beginComparison(client1, client2, namespace, null);
+                }
+                else {
+                    for (String thisSet : sets) {
+                        beginComparison(client1, client2, namespace, thisSet);
+                    }
                 }
             }
         }
@@ -494,7 +599,12 @@ public class ClusterComparator {
     
     private void monitorProgress(String namespace, String setName) throws InterruptedException {
         if (!options.isSilent()) {
-            System.out.println("Comparison started for namespace " + namespace + ((setName == null) ?  "." : (", set " + setName + ".")));
+            if (options.getAction().needsInputFile() ) {
+                System.out.println("Comparison started using input file: " + options.getInputFileName());
+            }
+            else {
+                System.out.println("Comparison started for namespace " + namespace + ((setName == null) ?  "." : (", set " + setName + ".")));
+            }
         }
         long lastRecordsCluster1 = 0;
         long lastRecordsCluster2 = 0;
@@ -508,10 +618,19 @@ public class ClusterComparator {
             long now = System.currentTimeMillis();
             long elapsedMilliseconds = now - startTime;
             if (!options.isSilent()) {
-                System.out.printf("%,dms: [%d-%d, remaining %d], active threads: %d, records processed: {cluster1: %,d, cluster2: %,d} throughput: {last second: %,d rps, overall: %,d rps}\n", 
-                        (now-startTime), this.startPartition, this.endPartition, nextPartition, activeThreads, currentRecordsCluster1, 
-                        currentRecordsCluster2, ((currentRecordsCluster1-lastRecordsCluster1)+(currentRecordsCluster2-lastRecordsCluster2))/2,
-                        (currentRecordsCluster1+currentRecordsCluster2)*1000/2/elapsedMilliseconds);
+                if (options.getAction() != Action.RERUN) {
+                    System.out.printf("%,dms: [%d-%d, remaining %d], active threads: %d, records processed: {cluster1: %,d, cluster2: %,d} throughput: {last second: %,d rps, overall: %,d rps}\n", 
+                            (now-startTime), this.startPartition, this.endPartition, nextPartition, activeThreads, currentRecordsCluster1, 
+                            currentRecordsCluster2, ((currentRecordsCluster1-lastRecordsCluster1)+(currentRecordsCluster2-lastRecordsCluster2))/2,
+                            (currentRecordsCluster1+currentRecordsCluster2)*1000/2/elapsedMilliseconds);
+                }
+                else {
+                    long remaining = recordsRemaining.get();
+                    System.out.printf("%,dms: [remaining: %d%s], active threads: %d, records processed: {cluster1: %,d, cluster2: %,d} throughput: {last second: %,d rps, overall: %,d rps}\n", 
+                            (now-startTime), remaining, remaining == FileLoadingProcessor.MAX_QUEUE_DEPTH ? "+" : "", activeThreads, currentRecordsCluster1, 
+                            currentRecordsCluster2, ((currentRecordsCluster1-lastRecordsCluster1)+(currentRecordsCluster2-lastRecordsCluster2))/2,
+                            (currentRecordsCluster1+currentRecordsCluster2)*1000/2/elapsedMilliseconds);
+                }
             }
             lastRecordsCluster1 = currentRecordsCluster1;
             lastRecordsCluster2 = currentRecordsCluster2;
@@ -520,11 +639,15 @@ public class ClusterComparator {
         
         if (!options.isSilent()) {
             if (options.isRecordLevelCompare()) {
-                System.out.printf("Finished: %d missing records on side 1, %d missing records on side 2, %d records different, %,d records compared.\n", 
+                System.out.printf("Missing records on side 1 : %,d\n"
+                                + "Missing records on side 2 : %,d\n"
+                                + "Records different         : %,d\n"
+                                + "Records compared          : %,d\n", 
                         this.missingRecordsCluster1.get(), this.missingRecordsCluster2.get(), this.recordsDifferentCount.get(), this.totalRecordsCompared.get());
             }
             else {
-                System.out.printf("Finished: %,d missing records on side 1, %,d missing records on side 2.\n", 
+                System.out.printf("Missing records on side 1 : %,d\n"
+                                + "Missing records on side 2 : %,d\n", 
                         this.missingRecordsCluster1.get(), this.missingRecordsCluster2.get());
             }
             if (this.forceTerminate) {
@@ -538,16 +661,6 @@ public class ClusterComparator {
                 }
             }
         }
-    }
-    
-    public static byte[] hexStringToByteArray(String s) {
-        int len = s.length();
-        byte[] data = new byte[len / 2];
-        for (int i = 0; i < len; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
-                                 + Character.digit(s.charAt(i+1), 16));
-        }
-        return data;
     }
     
     private void touchRecord(AerospikeClientAccess client, Key key) {
@@ -578,54 +691,84 @@ public class ClusterComparator {
         }
     }
 
-    private void touchRecord(AerospikeClientAccess client, String namespace, String setName, String digest) {
-        Key key = new Key(namespace, hexStringToByteArray(digest), setName, null);
-        touchRecord(client, key);
+    private final FileLineProcessor TOUCH_RECORD_PROCESSOR = new FileLineProcessor() {
+        @Override
+        public void process(AerospikeClientAccess client1, AerospikeClientAccess client2, FileLine line) {
+            touchRecord(line.hasDigest1() ? client1 : client2, line.getKey());
+        }
+    };
+    
+    private final FileLineProcessor READ_RECORD_PROCESSOR = new FileLineProcessor() {
+        @Override
+        public void process(AerospikeClientAccess client1, AerospikeClientAccess client2, FileLine line) {
+            readRecord(line.hasDigest1() ? client1 : client2, line.getKey());
+        }
+    };
+    
+    /**
+     * This processor simply loads lines from a file and serves them through a queue. The queue is thread
+     * safe and is designed so multiple threads will pull lines to be processed and the internal class will
+     * keep reading the file and topping up the line buffer.
+     * @author tfaulkes
+     *
+     */
+    private class FileLoadingProcessor implements FileLineProcessor {
+        public static final int MAX_QUEUE_DEPTH = 10000;
+        private ArrayBlockingQueue<FileLine> lines = new ArrayBlockingQueue<>(MAX_QUEUE_DEPTH);
+        private volatile boolean done = false;
+        
+        public FileLoadingProcessor() {
+            Thread producer = new Thread(() -> {
+                try {
+                    processRecords(null, null, (client1, client2, line) -> {
+                        try {
+                            lines.put(line);
+                        } catch (InterruptedException e) {
+                            System.err.println("InterruptedException reading file: " + e.getMessage());
+                        }
+                    }, options.getInputFileName());
+                } catch (IOException e) {
+                    System.err.println("IOException reading file: " + e.getMessage());
+                }
+                done = true;
+            }, "RecordProducer");
+            producer.setDaemon(true);
+            producer.start();
+        }
+        
+        public synchronized FileLine get() throws InterruptedException {
+            recordsRemaining.set(lines.size());
+            if (isDone()) {
+                return null;
+            }
+            return lines.take();
+        }
+        
+        public boolean isDone() {
+            return done && lines.isEmpty();
+        }
+        @Override
+        public void process(AerospikeClientAccess client1, AerospikeClientAccess client2, FileLine line) {
+            readRecord(line.hasDigest1() ? client1 : client2, line.getKey());
+        }
     }
     
-    private void readRecord(AerospikeClientAccess client, String namespace, String setName, String digest) {
-        Key key = new Key(namespace, hexStringToByteArray(digest), setName, null);
-        readRecord(client, key);
-    }
-    
-    private void processRecords(AerospikeClientAccess client1, AerospikeClientAccess client2, boolean touch, boolean read) throws IOException {
-        File file = new File(options.getFileName());
+    private void processRecords(AerospikeClientAccess client1, AerospikeClientAccess client2, FileLineProcessor processor, String fileName) throws IOException {
+        File file = new File(fileName);
         BufferedReader br = new BufferedReader(new FileReader(file));
         
         try {
             String line = br.readLine();
             if (!CsvDifferenceHandler.FILE_HEADER.equals(line)) {
-                throw new UnsupportedOperationException("File " + options.getFileName() + " has a header which does not match what was expected. Expected '" + CsvDifferenceHandler.FILE_HEADER + "' but received '" + line + "'");
+                throw new UnsupportedOperationException("File " + options.getOutputFileName() + " has a header which does not match what was expected. Expected '" + CsvDifferenceHandler.FILE_HEADER + "' but received '" + line + "'");
             }
 
             while ((line = br.readLine()) != null) {
-                String[] linePart = line.split(",");
-                String namespace = linePart[0];
-                String setName = linePart[1];
-                String userKey = linePart[2];
-                String digest1 = linePart[3];
-                String digest2 = linePart.length >= 5 ? linePart[4] : null;
-                if (digest1 != null && !digest1.trim().isEmpty() && !"null".equals(digest1)) {
-                    if (read) {
-                        this.readRecord(client1, namespace, setName, digest1);
-                    }
-                    if (touch) {
-                        this.touchRecord(client1, namespace, setName, digest1);
-                    }
-                }
-                else if (digest2 != null && !digest2.trim().isEmpty()) {
-                    if (read) {
-                        this.readRecord(client2, namespace, setName, digest2);
-                    }
-                    if (touch) {
-                        this.touchRecord(client2, namespace, setName, digest2);
-                    }
-                }
+                processor.process(client1, client2, new FileLine(line));
             }
         } finally {
             br.close();
         }
-        
     }
     
     private void startRemoteServer() {
@@ -661,26 +804,25 @@ public class ClusterComparator {
         Scanner input = null;
         try {
             if (options.getAction() == Action.TOUCH) {
-                this.processRecords(client1, client2, true, false);
+                this.processRecords(client1, client2, TOUCH_RECORD_PROCESSOR, options.getInputFileName());
             }
             else if (options.getAction() == Action.READ) {
-                this.processRecords(client1, client2, false, true);
+                this.processRecords(client1, client2, READ_RECORD_PROCESSOR, options.getInputFileName());
             }
             else {
-                this.beginComparisons(client1, client2);
+                this.performComparisons(client1, client2);
                 if (options.getAction() == Action.SCAN_ASK && (totalMissingRecords.get() > 0 || recordsDifferentCount.get() > 0)) {
                     System.out.printf("%,d differences found between the 2 clusters. Do you want those records to be touched, read or none? (t/r//N)", totalMissingRecords.get());
                     input = new Scanner(System.in);
-                    boolean touch = false;
-                    boolean read = false;
+                    FileLineProcessor processor = null;
                     while (true) {
                         String  next = input.nextLine();
                         if (next.trim().toUpperCase().startsWith("T")) {
-                            touch = true;
+                            processor = TOUCH_RECORD_PROCESSOR;
                             break;
                         }
                         if (next.trim().toUpperCase().startsWith("R")) {
-                            read = true;
+                            processor = READ_RECORD_PROCESSOR;
                             break;
                         }
                         if (next.trim().toUpperCase().startsWith("N") || next.trim().length() == 0) {
@@ -688,8 +830,8 @@ public class ClusterComparator {
                         }
                         System.out.printf("Please enter 't', 'r' or 'n'\n");
                     }
-                    if (touch || read) {
-                        processRecords(client1, client2, touch, read);
+                    if (processor != null) {
+                        processRecords(client1, client2, processor, options.getOutputFileName());
                     }
                 }
             }
