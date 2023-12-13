@@ -13,6 +13,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -60,6 +61,7 @@ public class ClusterComparator {
     private final AtomicLong totalMissingRecords = new AtomicLong();
     private final AtomicLong totalRecordsCompared = new AtomicLong();
     private final AtomicLong recordsRemaining = new AtomicLong();
+    private final AtomicBoolean[] partitionsComplete;
     
     private ExecutorService executor = null;
     private AtomicInteger activeThreads;
@@ -102,6 +104,11 @@ public class ClusterComparator {
         this.options = options;
         this.startPartition = Math.max(options.getStartPartition(), 0);
         this.endPartition = Math.min(4096, options.getEndPartition());
+        int partitionCount = endPartition - startPartition;
+        this.partitionsComplete = new AtomicBoolean[partitionCount];
+        for (int i = 0; i < partitionCount; i++) {
+            partitionsComplete[i] = new AtomicBoolean(false);
+        }
         InternalHandler handler = new InternalHandler();
         this.missingRecordHandlers.add(handler);
         this.recordDifferenceHandlers.add(handler);
@@ -117,6 +124,41 @@ public class ClusterComparator {
         }
     }
     
+    private void addInPartitions(StringBuffer sb, int runCount, int current) {
+        if (sb.length() > 1 && runCount > 0) {
+            sb.append(',');
+        }
+        if (runCount == 1) {
+            sb.append(this.startPartition + current-1);
+        }
+        else if (runCount > 1) {
+            sb.append(this.startPartition + current-runCount).append('-').append(this.startPartition + current-1);
+        }
+    }
+    
+    private String getPartitionsComplete() {
+        StringBuffer sb = new StringBuffer().append('[');
+        int partitionCount = endPartition - startPartition;
+        int runCount = 0;
+        for (int i = 0; i < partitionCount; i++) {
+            if (partitionsComplete[i].get()) {
+                if (runCount > 0) {
+                    runCount++;
+                }
+                else {
+                    runCount = 1;
+                }
+            }
+            else {
+                if (runCount > 0) {
+                    addInPartitions(sb, runCount, i);
+                    runCount = 0;
+                }
+            }
+        }
+        addInPartitions(sb, runCount, partitionCount);
+        return sb.append(']').toString();
+    }
     private String tlsPolicyAsString(TlsPolicy policy) {
         if (policy == null) {
             return "null";
@@ -400,6 +442,7 @@ public class ClusterComparator {
         finally {
             recordSet1.close();
             recordSet2.close();
+            partitionsComplete[partitionId-startPartition].set(true);
         }
     }
 
@@ -619,14 +662,14 @@ public class ClusterComparator {
             long elapsedMilliseconds = now - startTime;
             if (!options.isSilent()) {
                 if (options.getAction() != Action.RERUN) {
-                    System.out.printf("%,dms: [%d-%d, remaining %d], active threads: %d, records processed: {cluster1: %,d, cluster2: %,d} throughput: {last second: %,d rps, overall: %,d rps}\n", 
-                            (now-startTime), this.startPartition, this.endPartition, nextPartition, activeThreads, currentRecordsCluster1, 
+                    System.out.printf("%,dms: [%d-%d, remaining %d, complete:%s], active threads: %d, records processed: {cluster1: %,d, cluster2: %,d} throughput: {last second: %,d rps, overall: %,d rps}\n", 
+                            (now-startTime), this.startPartition, this.endPartition, nextPartition, getPartitionsComplete(), activeThreads, currentRecordsCluster1, 
                             currentRecordsCluster2, ((currentRecordsCluster1-lastRecordsCluster1)+(currentRecordsCluster2-lastRecordsCluster2))/2,
                             (currentRecordsCluster1+currentRecordsCluster2)*1000/2/elapsedMilliseconds);
                 }
                 else {
                     long remaining = recordsRemaining.get();
-                    System.out.printf("%,dms: [remaining: %d%s], active threads: %d, records processed: {cluster1: %,d, cluster2: %,d} throughput: {last second: %,d rps, overall: %,d rps}\n", 
+                    System.out.printf("%,dms: [buffer lines: %d%s], active threads: %d, records processed: {cluster1: %,d, cluster2: %,d} throughput: {last second: %,d rps, overall: %,d rps}\n", 
                             (now-startTime), remaining, remaining == FileLoadingProcessor.MAX_QUEUE_DEPTH ? "+" : "", activeThreads, currentRecordsCluster1, 
                             currentRecordsCluster2, ((currentRecordsCluster1-lastRecordsCluster1)+(currentRecordsCluster2-lastRecordsCluster2))/2,
                             (currentRecordsCluster1+currentRecordsCluster2)*1000/2/elapsedMilliseconds);

@@ -75,7 +75,7 @@ public class RemoteServer {
                             dos.writeByte(b);
                         }
                     }
-                    catch (IOException ioe) {
+                    finally {
                         if (dis != null) {
                             try {
                                 dis.close();
@@ -224,107 +224,118 @@ public class RemoteServer {
             RecordSetAccess recordsSet = client.queryPartitions(qp, stmt, partitionFilter);
             dos.writeUTF("Ready");
             boolean done = false;
-            while (!done) {
-                int command = dis.read();
-                switch (command) {
-                case CMD_RS_MULTI:
-                case CMD_RS_MULTI_KEY_ONLY:
-                case CMD_RS_MULTI_RECORD_HASH:
-                    int num = dis.readInt();
-                    long now = 0;
-                    int recordsReturned = 0;
-                    if (this.debug) {
-                        System.out.printf("Processing request for %s keys/records (%d)\n", num, command);
-                        now = System.nanoTime();
-                    }
-                    boolean hasMore = true;
-                    for (int i = 0; hasMore && i < num; i++) {
-                        hasMore = recordsSet.next();
-                        dos.writeBoolean(hasMore);
-                        if (hasMore) {
-                            Key key = recordsSet.getKey();
-                            if (debug) {
-                                System.out.printf("Sending data for %s\n", key);
-                            }
-                            RemoteUtils.sendKey(key, dos);
-                            if (command == CMD_RS_MULTI_RECORD_HASH) {
-                                RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos, sortMaps);
-                            }
-                            else if (command == CMD_RS_MULTI) {
-                                RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
-                            }
-                            recordsReturned++;
+            try {
+                while (!done) {
+                    int command = dis.read();
+                    switch (command) {
+                    case CMD_RS_MULTI:
+                    case CMD_RS_MULTI_KEY_ONLY:
+                    case CMD_RS_MULTI_RECORD_HASH:
+                        int num = dis.readInt();
+                        long now = 0;
+                        int recordsReturned = 0;
+                        if (this.debug) {
+                            System.out.printf("Processing request for %s keys/records (%d)\n", num, command);
+                            now = System.nanoTime();
                         }
+                        boolean hasMore = true;
+                        for (int i = 0; hasMore && i < num; i++) {
+                            hasMore = recordsSet.next();
+                            dos.writeBoolean(hasMore);
+                            if (hasMore) {
+                                Key key = recordsSet.getKey();
+                                if (debug) {
+                                    System.out.printf("Sending data for %s\n", key);
+                                }
+                                RemoteUtils.sendKey(key, dos);
+                                if (command == CMD_RS_MULTI_RECORD_HASH) {
+                                    RemoteUtils.sendRecordHash(recordsSet.getRecord(), dos, sortMaps);
+                                }
+                                else if (command == CMD_RS_MULTI) {
+                                    RemoteUtils.sendRecord(recordsSet.getRecord(), dos);
+                                }
+                                recordsReturned++;
+                            }
+                        }
+                        if (this.debug) {
+                            long time = System.nanoTime() - now;
+                            System.out.printf("Finished processing request for %,d records in %,dus (%,d returned)\n", num, time/1000, recordsReturned);
+                        }
+                        break;
+                        
+                    case CMD_RS_NEXT:
+                        now = 0;
+                        if (this.debug) {
+                            System.out.printf("Processing request for next record\n");
+                            now = System.nanoTime();
+                        }
+                        dos.writeBoolean(recordsSet.next());
+                        if (this.debug) {
+                            long time = System.nanoTime() - now;
+                            System.out.printf("Finished processing request for next records in %,dus\n", time/1000);
+                        }
+                        break;
+                        
+                    case CMD_RS_KEY:
+                        now = 0;
+                        if (this.debug) {
+                            System.out.printf("Processing for key\n");
+                            now = System.nanoTime();
+                        }
+                        Key key = recordsSet.getKey();
+                        RemoteUtils.sendKey(key, dos);
+                        if (this.debug) {
+                            long time = System.nanoTime() - now;
+                            System.out.printf("Finished processing request for key in %,dus\n", time/1000);
+                        }
+                        break;
+                     
+                    case CMD_RS_RECORD:
+                        now = 0;
+                        if (this.debug) {
+                            System.out.printf("Processing request for record\n");
+                            now = System.nanoTime();
+                        }
+                        Record record = recordsSet.getRecord();
+                        RemoteUtils.sendRecord(record, dos);
+                        if (this.debug) {
+                            long time = System.nanoTime() - now;
+                            System.out.printf("Finished processing request for record in %,dus\n", time/1000);
+                        }
+                        break;
+                        
+                    case CMD_RS_RECORD_HASH:
+                        now = 0;
+                        if (this.debug) {
+                            System.out.printf("Processing request for record\n");
+                            now = System.nanoTime();
+                        }
+                        record = recordsSet.getRecord();
+                        RemoteUtils.sendRecordHash(record, dos, sortMaps);
+                        if (this.debug) {
+                            long time = System.nanoTime() - now;
+                            System.out.printf("Finished processing request for record in %,dus\n", time/1000);
+                        }
+                        break;
+                        
+                    case CMD_RS_CLOSE:
+                        if (this.debug) {
+                            System.out.println("Received close on record set, finishing partition");
+                        }
+                        done = true;
+                        dos.writeInt(0);
                     }
-                    if (this.debug) {
-                        long time = System.nanoTime() - now;
-                        System.out.printf("Finished processing request for %,d records in %,dus (%,d returned)\n", num, time/1000, recordsReturned);
-                    }
-                    break;
-                    
-                case CMD_RS_NEXT:
-                    now = 0;
-                    if (this.debug) {
-                        System.out.printf("Processing request for next record\n");
-                        now = System.nanoTime();
-                    }
-                    dos.writeBoolean(recordsSet.next());
-                    if (this.debug) {
-                        long time = System.nanoTime() - now;
-                        System.out.printf("Finished processing request for next records in %,dus\n", time/1000);
-                    }
-                    break;
-                    
-                case CMD_RS_KEY:
-                    now = 0;
-                    if (this.debug) {
-                        System.out.printf("Processing for key\n");
-                        now = System.nanoTime();
-                    }
-                    Key key = recordsSet.getKey();
-                    RemoteUtils.sendKey(key, dos);
-                    if (this.debug) {
-                        long time = System.nanoTime() - now;
-                        System.out.printf("Finished processing request for key in %,dus\n", time/1000);
-                    }
-                    break;
-                 
-                case CMD_RS_RECORD:
-                    now = 0;
-                    if (this.debug) {
-                        System.out.printf("Processing request for record\n");
-                        now = System.nanoTime();
-                    }
-                    Record record = recordsSet.getRecord();
-                    RemoteUtils.sendRecord(record, dos);
-                    if (this.debug) {
-                        long time = System.nanoTime() - now;
-                        System.out.printf("Finished processing request for record in %,dus\n", time/1000);
-                    }
-                    break;
-                    
-                case CMD_RS_RECORD_HASH:
-                    now = 0;
-                    if (this.debug) {
-                        System.out.printf("Processing request for record\n");
-                        now = System.nanoTime();
-                    }
-                    record = recordsSet.getRecord();
-                    RemoteUtils.sendRecordHash(record, dos, sortMaps);
-                    if (this.debug) {
-                        long time = System.nanoTime() - now;
-                        System.out.printf("Finished processing request for record in %,dus\n", time/1000);
-                    }
-                    break;
-                    
-                case CMD_RS_CLOSE:
-                    if (this.debug) {
-                        System.out.println("Received close on record set, finishing partition");
-                    }
-                    recordsSet.close();
-                    done = true;
-                    dos.writeInt(0);
                 }
+            }
+            catch (IOException ioe) {
+                System.err.printf("IOExeception caught in doQueryPartition, aborting.");
+                throw ioe;
+            }
+            finally {
+                if (recordsSet != null) {
+                    recordsSet.close();
+                }
+                
             }
         }
         
