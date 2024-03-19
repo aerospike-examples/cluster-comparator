@@ -30,6 +30,11 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import nl.altindag.ssl.SSLFactory;
 import nl.altindag.ssl.pem.util.PemUtils;
 
+/**
+ * Options parser and storage for controlling the cluster comparator.  
+ * @author tfaulkes
+ *
+ */
 public class ClusterComparatorOptions {
     private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-hh:mm:ssZ";
     public static enum Action {
@@ -104,113 +109,13 @@ public class ClusterComparatorOptions {
     private boolean debug = false;
     private boolean sortMaps = false;
     
-    private static class ParseException extends RuntimeException {
+    static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
 
         public ParseException(String message) {
             super(message);
         }
     }
-    private static class StringWithOffset {
-        private int offset = 0;
-        private final String data;
-        public StringWithOffset(String data) {
-            this.data = data;
-        }
-        public boolean checkAndConsumeSymbol(char ch) {
-            return checkAndConsumeSymbol(ch, true);
-        }
-        private boolean skipWhitespace() {
-            while (offset < data.length() && Character.isWhitespace(data.charAt(offset))) {
-                offset++;
-            }
-            return offset < data.length();
-        }
-        
-        public boolean checkAndConsumeSymbol(char ch, boolean mandatory) {
-            if (this.skipWhitespace()) {
-                if (data.charAt(offset) == ch) {
-                    offset++;
-                    return true;
-                }
-                else {
-                    throw new ParseException("Expected '" + ch + "' but received '" + data.charAt(offset) + "'");
-                }
-            }
-            if (mandatory) {
-                throw new ParseException("Expected '" + ch + "' but received end of input");
-            }
-            else {
-                return false;
-            }
-        }
-        
-        public boolean isSymbol(char ch) {
-            return isSymbol(ch, true);
-        }
-        
-        public boolean isSymbol(char ch, boolean consumeSymbol) {
-            if (skipWhitespace() && data.charAt(offset) == ch) {
-                if (consumeSymbol) {
-                    offset++;
-                }
-                return true;
-            }
-            return false;
-        }
-
-        public String getString() {
-            if (skipWhitespace()) {
-                if (data.charAt(offset)=='"') {
-                    offset++;
-                    int next = data.indexOf('"', offset);
-                    if (next < 0) {
-                        throw new ParseException("Expected a string no matching end of string found");
-                    }
-                    else {
-                        String result = data.substring(offset, next);
-                        offset = next+1;
-                        return result;
-                    }
-                }
-                else if (data.charAt(offset)=='{') {
-                    int start = offset;
-                    // Nested object, scan to the end of the nesting
-                    int endBraceCount = 1;
-                    offset++;
-                    while (endBraceCount > 0 && offset < data.length()) {
-                        if (data.charAt(offset) == '{') {
-                            endBraceCount++;
-                        }
-                        else if (data.charAt(offset) == '}') {
-                            endBraceCount--;
-                        }
-                        offset++;
-                    }
-                    if (endBraceCount == 0) {
-                        return data.substring(start, offset);
-                    }
-                    else {
-                        throw new ParseException(String.format("Error whilst parsing string: '%s': received '{' to start object but didn't having a matching closing '}'"));
-                    }
-                }
-                else {
-                    int start = offset;
-                    while (offset < data.length() && Character.isJavaIdentifierPart(data.charAt(offset))) {
-                        offset++;
-                    }
-                    return data.substring(start, offset);
-                }
-            }
-            return null;
-        }
-        
-        @Override
-        public String toString() {
-            return String.format("(offset:%d,current:%s)[%s]", offset, offset < data.length()? data.substring(offset, offset+1) : "EOS" , data);
-        }
-    }
-    
     private SSLFactory parseTlsContext(String tlsContext) {
         String certChain = null;
         String privateKey = null;

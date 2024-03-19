@@ -533,7 +533,10 @@ public class ClusterComparator {
                         DifferenceSet compareResult = null;
                         Record record1 = client1.get(null, key);
                         Record record2 = client2.get(null, key);
-                        if (record1 == null && record2 != null) {
+                        if (record1 == null && record2 == null) {
+                            // Do nothing, this shouldn't happen
+                        }
+                        else if (record1 == null && record2 != null) {
                             missingRecord(client2, partId, key, Side.SIDE_1);
                         }
                         else if (record1 != null && record2 == null) {

@@ -7,6 +7,17 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * This class implements a comparator instance which mirrors the comparator Aerospike 
+ * uses on the server. This is type based, so
+ * <pre>
+ *   NULL &lt; Boolean &lt; Integer &lt; String &lt; List &lt Map &lt; Bytes &lt; Double
+ * </pre>
+ * 
+ * Within these types, natural ordering applies.
+ * @author tfaulkes
+ *
+ */
 public class AerospikeComparator implements Comparator<Object> {
     private static enum AsType {
         NULL (1),
