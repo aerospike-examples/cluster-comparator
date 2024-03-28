@@ -1,10 +1,6 @@
 package com.aerospike.comparator;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
@@ -12,25 +8,17 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import javax.net.ssl.X509ExtendedKeyManager;
-import javax.net.ssl.X509ExtendedTrustManager;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 
-import com.aerospike.client.AerospikeException;
 import com.aerospike.client.policy.AuthMode;
 import com.aerospike.client.policy.TlsPolicy;
-import com.aerospike.client.util.Util;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
-
-import nl.altindag.ssl.SSLFactory;
-import nl.altindag.ssl.pem.util.PemUtils;
 
 /**
  * Options parser and storage for controlling the cluster comparator.  
@@ -517,7 +505,9 @@ public class ClusterComparatorOptions {
         if (ports.length == 2) {
             this.remoteServerHeartbeatPort = Integer.valueOf(ports[1]);
         }
-        this.remoteServerTls = parseTlsOptions(cl.getOptionValue("remoteServerTls")).toTlsPolicy();
+        if (cl.hasOption("remoteServerTls")) {
+            this.remoteServerTls = parseTlsOptions(cl.getOptionValue("remoteServerTls")).toTlsPolicy();
+        }
         this.remoteCacheSize = Integer.valueOf(cl.getOptionValue("remoteCacheSize", "0"));
         this.remoteServerHashes = Boolean.valueOf(cl.getOptionValue("remoteServerHashes", "true"));
         this.verbose = cl.hasOption("verbose");

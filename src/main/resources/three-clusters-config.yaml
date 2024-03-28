@@ -1,0 +1,6 @@
+---
+clusters:
+- hostName: 172.17.0.2:3100
+  authMode: INTERNAL
+- hostName: 172.17.0.3:3101
+- hostName: 172.17.0.4:3102

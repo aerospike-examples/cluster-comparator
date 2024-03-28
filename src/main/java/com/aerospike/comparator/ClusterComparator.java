@@ -190,7 +190,7 @@ public class ClusterComparator {
         
         clientPolicy.user = config.getUserName();
         clientPolicy.password = config.getPassword();
-        clientPolicy.tlsPolicy = config.getTls().toTlsPolicy();
+        clientPolicy.tlsPolicy = config.getTls() == null ? null : config.getTls().toTlsPolicy();
         clientPolicy.authMode = config.getAuthMode();
         clientPolicy.clusterName = config.getClusterName();
         clientPolicy.useServicesAlternate = config.isUseServicesAlternate();
@@ -368,10 +368,17 @@ public class ClusterComparator {
         }
         Key keyToReturn = keys[0];
         for (int i = 1; i < keys.length; i++) {
-            int result = compare(keyToReturn.digest, keys[i].digest);
-            if (result < 0) {
-                // max < keys[i].digest
+            if (keyToReturn == null) {
                 keyToReturn = keys[i];
+            }
+            else {
+                if (keys[i] != null) {
+                    int result = compare(keyToReturn.digest, keys[i].digest);
+                    if (result < 0) {
+                        // max < keys[i].digest
+                        keyToReturn = keys[i];
+                    }
+                }
             }
         }
         return keyToReturn;
@@ -431,7 +438,10 @@ public class ClusterComparator {
                     System.out.println();
                 }
                 for (int i = 0; i < clients.length; i++) {
-                    if (compare(keys[i].digest, keyWithLargestDigest.digest) == 0) {
+                    if (keys[i] == null) {
+                        clustersWithoutRecord.add(i);
+                    }
+                    else if (compare(keys[i].digest, keyWithLargestDigest.digest) == 0) {
                         // This is valid, advance or compare
                         clustersWithMaxDigest.add(i);
                     }

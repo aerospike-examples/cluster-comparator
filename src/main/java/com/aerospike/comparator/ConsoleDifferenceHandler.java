@@ -11,7 +11,7 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
     
     @Override
     public void handle(int partitionId, Key key, List<Integer> missingFromClusters) throws IOException {
-        System.out.printf("%s,%s,%s,%s,%s\n",key.namespace,key.setName, key.userKey, missingFromClusters);
+        System.out.printf("%s,%s,%s,%s\n",key.namespace,key.setName, key.userKey, missingFromClusters);
     }
 
     @Override
