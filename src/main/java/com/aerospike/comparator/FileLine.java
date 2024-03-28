@@ -1,21 +1,29 @@
 package com.aerospike.comparator;
 
 import com.aerospike.client.Key;
+import com.aerospike.client.Value;
 
 public class FileLine {
     private final String namespace;
     private final String setName;
     private final String userKey;
-    private final String digest1;
-    private final String digest2;
+    private final String[] digests;
     
     public FileLine(String line) {
         String[] linePart = line.split(",");
+        int numberOfClusters = 2;
+        int digestOffset = 3;
         this.namespace = linePart[0];
         this.setName = linePart[1];
         this.userKey = linePart[2];
-        this.digest1 = parseDigest(linePart, 3);
-        this.digest2 = parseDigest(linePart, 4);
+        if (linePart[3].matches("\\d+")) {
+            numberOfClusters = Integer.parseInt(linePart[3]);
+            digestOffset = 4;
+        }
+        this.digests = new String[numberOfClusters];
+        for (int i = 0; i < numberOfClusters; i++) {
+            this.digests[i] = parseDigest(linePart, digestOffset + i);
+        }
     }
     private String parseDigest(String[] lineParts, int index) {
         if (index < lineParts.length) {
@@ -39,22 +47,15 @@ public class FileLine {
         return userKey;
     }
 
-    public String getDigest1() {
-        return digest1;
+    public String getDigest(int digestNumber) {
+        return digests[digestNumber];
     }
 
-    public String getDigest2() {
-        return digest2;
-    }
     
-    public boolean hasDigest1() {
-        return !digest1.isEmpty();
+    public boolean hasDigest(int digestNumber) {
+        return digestNumber >= 0 && digestNumber < digests.length && !digests[digestNumber].isEmpty();
     }
 
-    public boolean hasDigest2() {
-        return !digest2.isEmpty();
-    }
-    
     public static byte[] hexStringToByteArray(String s) {
         int len = s.length();
         byte[] data = new byte[len / 2];
@@ -66,15 +67,27 @@ public class FileLine {
     }
 
     public Key getKey() {
-        return getKey(null);
+        if (!this.userKey.isEmpty()) {
+            return new Key(this.namespace, this.setName, this.userKey);
+        }
+        for (int i = 0; i < digests.length; i++) {
+            if (hasDigest(i)) {
+                return new Key(this.namespace, hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
+            }
+        }
+        throw new IllegalStateException("Could not find any digest or user key");
     }
-    public Key getKey(Side side) {
-        if ((side == null && hasDigest1()) || (side == Side.SIDE_1)) {
-            return new Key(this.namespace, hexStringToByteArray(digest1), this.setName, null);
+
+    public Key getKey(int i) {
+        if (i < 0 || i >= digests.length) {
+            throw new IllegalArgumentException(String.format("key must be in the range 0 to %d, not %d",  digests.length, i));
         }
-        if ((side == null && hasDigest2()) || (side == Side.SIDE_2)) {
-            return new Key(this.namespace, hexStringToByteArray(digest2), this.setName, null);
+        if (userKey != null) {
+            return new Key(this.namespace, this.setName, this.userKey);
         }
-        return new Key(this.namespace, this.setName, this.userKey);
+        if (hasDigest(i)) {
+            return new Key(this.namespace, hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
+        }
+        throw new IllegalStateException("Could not find any digest or user key");
     }
 }

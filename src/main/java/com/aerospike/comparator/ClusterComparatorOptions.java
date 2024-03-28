@@ -8,7 +8,9 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 import javax.net.ssl.X509ExtendedKeyManager;
 import javax.net.ssl.X509ExtendedTrustManager;
@@ -67,6 +69,7 @@ public class ClusterComparatorOptions {
         RECORD_DIFFERENCES
     }
     
+    private List<ClusterConfig> clusters = null;
     private boolean console = false;
     private boolean silent = false;
     private CompareMode compareMode = CompareMode.MISSING_RECORDS;
@@ -87,8 +90,8 @@ public class ClusterComparatorOptions {
     private String userName2;
     private String password1;
     private String password2;
-    private TlsPolicy tlsPolicy1;
-    private TlsPolicy tlsPolicy2;
+    private TlsOptions tlsOptions1;
+    private TlsOptions tlsOptions2;
     private AuthMode authMode1;
     private AuthMode authMode2;
     private boolean servicesAlternate1;
@@ -108,6 +111,7 @@ public class ClusterComparatorOptions {
     private boolean verbose = false;
     private boolean debug = false;
     private boolean sortMaps = false;
+    private ConfigOptions configOptions = null;
     
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -116,11 +120,9 @@ public class ClusterComparatorOptions {
             super(message);
         }
     }
-    private SSLFactory parseTlsContext(String tlsContext) {
-        String certChain = null;
-        String privateKey = null;
-        String caCertChain = null;
-        String keyPassword = null;
+    
+    private SSLOptions parseTlsContext(String tlsContext) {
+        SSLOptions options = new SSLOptions();
         
         StringWithOffset stringData = new StringWithOffset(tlsContext);
         stringData.checkAndConsumeSymbol('{');
@@ -133,95 +135,50 @@ public class ClusterComparatorOptions {
             }
             switch (subkey) {
             case "certChain":
-                certChain = subValue;
+                options.setCertChain(subValue);
                 break;
             case "privateKey":
-                privateKey = subValue;
+                options.setPrivateKey(subValue);
                 break;
             case "caCertChain":
-                caCertChain = subValue;
+                options.setCaCertChain(subValue);
                 break;
             case "keyPassword":
-                keyPassword = subValue;
+                options.setKeyPassword(subValue);
                 break;
             default: 
                 throw new ParseException("Unexpected key '" + subkey + "' in TLS Context. Valid keys are: 'certChain', 'privateKey', 'caCertChain', and 'keyPassword'");
             }
         }
-        
-        InputStream certFile = null;
-        InputStream keyFile = null;
-        InputStream caFile = null;
-        try {
-            try {
-                certFile = new FileInputStream(new File(certChain));
-            } catch (FileNotFoundException e) {
-                throw new AerospikeException(String.format("certChain file '%s' not found", certChain));
-            }
-            try {
-                keyFile = new FileInputStream(new File(privateKey));
-            } catch (FileNotFoundException e) {
-                throw new AerospikeException(String.format("privateKey file '%s' not found", certChain));
-            }
-            try {
-                caFile = new FileInputStream(new File(caCertChain));
-            } catch (FileNotFoundException e) {
-                throw new AerospikeException(String.format("caCertChain file '%s' not found", certChain));
-            }
-            X509ExtendedKeyManager keyManager = PemUtils.loadIdentityMaterial(certFile, keyFile, keyPassword == null ? null : keyPassword.toCharArray());
-            X509ExtendedTrustManager trustManager = PemUtils.loadTrustMaterial(caFile);
-    
-            SSLFactory sslFactory = SSLFactory.builder()
-                    .withIdentityMaterial(keyManager)
-                    .withTrustMaterial(trustManager)
-                    .build();
-            return sslFactory;
-        }
-        finally {
-            if (certFile != null) {
-                try {
-                    certFile.close();
-                } catch (IOException ignored) {}
-            }
-            if (keyFile != null) {
-                try {
-                    keyFile.close();
-                } catch (IOException ignored) {}
-            }
-            if (caFile != null) {
-                try {
-                    caFile.close();
-                } catch (IOException ignored) {}
-            }
-        }
+        return options;
     }
     
-    private void setPropertyOnTlsPolicy(TlsPolicy tlsPolicy, String key, String value) {
+    private void setPropertyOnTlsPolicy(TlsOptions tlsOptions, String key, String value) {
         switch (key) {
         case "protocols":
-            tlsPolicy.protocols = value.split(",");
+            tlsOptions.setProtocols(value);
             break;
         case "ciphers":
-            tlsPolicy.ciphers = value.split(",");
+            tlsOptions.setCiphers(value);
             break;
         case "revokeCerts":
-            tlsPolicy.revokeCertificates = Util.toBigIntegerArray(value);
+            tlsOptions.setRevokeCertificates(value);
             break;
         case "loginOnly":
-            tlsPolicy.forLoginOnly = Boolean.parseBoolean(value);
+            tlsOptions.setLoginOnly(Boolean.parseBoolean(value));
             break;
         case "context":
-            tlsPolicy.context = parseTlsContext(value).getSslContext();
+            tlsOptions.setSsl(parseTlsContext(value));
             break;
         default: 
             throw new ParseException("Unexpected key '" + key + "' in TLS policy. Valid keys are: 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'");
         }
     }
     
-    private TlsPolicy parseTlsPolicy(String tlsPolicy) {
-        if (tlsPolicy != null) {
-            TlsPolicy policy = new TlsPolicy();
-            StringWithOffset stringData = new StringWithOffset(tlsPolicy);
+    private TlsOptions parseTlsOptions(String tlsOptions) {
+        if (tlsOptions != null) {
+            TlsOptions policy = new TlsOptions();
+            StringWithOffset stringData = new StringWithOffset(tlsOptions);
             if (stringData.isSymbol('{')) {
                 while (true) {
                     String key = stringData.getString();
@@ -246,6 +203,7 @@ public class ClusterComparatorOptions {
     
     private Options formOptions() {
         Options options = new Options();
+        options.addOption("cf", "configFile", true, "YAML file with config options in it");
         options.addOption("S", "startPartition", true, "Partition to start the comparison at. (Default: 0)");
         options.addOption("E", "endPartition", true, "Partition to end the comparison at. The comparsion will not include this partition. (Default: 4096)");
         options.addOption("t", "threads", true, "Number of threads to use. Use 0 to use 1 thread per core. (Default: 1)");
@@ -360,12 +318,52 @@ public class ClusterComparatorOptions {
     
     private void validate(Options options) {
         boolean valid = false;
+        boolean hasErrors = false;
+
+        if (this.configOptions != null) {
+            this.clusters = this.configOptions.getClusters();
+        }
+        if (this.clusters == null) {
+            this.clusters = new ArrayList<>();
+            
+            // Create 2 clusters from the 2 explicitly passed parameters
+            ClusterConfig cluster = new ClusterConfig();
+            cluster.setAuthMode(getAuthMode1());
+            cluster.setClusterName(getClusterName1());
+            cluster.setHostName(getHosts1());
+            cluster.setPassword(getPassword1());
+            cluster.setUserName(getUserName1());
+            cluster.setUseServicesAlternate(isServicesAlternate1());
+            cluster.setTls(getTlsOptions1());
+            this.clusters.add(cluster);
+
+            cluster = new ClusterConfig();
+            cluster.setAuthMode(getAuthMode2());
+            cluster.setClusterName(getClusterName2());
+            cluster.setHostName(getHosts2());
+            cluster.setPassword(getPassword2());
+            cluster.setUserName(getUserName2());
+            cluster.setUseServicesAlternate(isServicesAlternate2());
+            cluster.setTls(getTlsOptions2());
+            this.clusters.add(cluster);
+        }
+        else {
+            // Cluster configs can be specified in the config file or command line options 
+            // but not both for now.
+            if (this.getHosts1() != null || this.getHosts2() != null) {
+                System.out.println("Hosts are specified in the config file so they cannot be passed on the command line as well");
+                hasErrors = true;
+            }
+        }
+
+        
         if (this.isRemoteServer()) {
-            if (this.hosts1 == null) {
-                System.out.println("host1 must be specified to give connection details to the first cluster");
+            if (this.clusters.size() != 1) {
+                System.out.printf("One cluster must be specified on the command line (host1 argument) or in the config file");
             }
             else {
-                valid = true;
+                //
+                valid = hasErrors;
             }
         }
         else {
@@ -393,11 +391,8 @@ public class ClusterComparatorOptions {
             else if (this.rps < 0) {
                 System.out.println("RPS must be >= 0, not " + this.rps);
             }
-            else if (this.hosts1 == null) {
-                System.out.println("host1 must be specified to give connection details to the first cluster");
-            }
-            else if (this.hosts2 == null) {
-                System.out.println("host1 must be specified to give connection details to the second cluster");
+            else if (this.clusters.size() < 2) {
+                System.out.printf("At least 2 cluster hosts must be specified on the command line (host1, host2 arguments) or in the config file");
             }
             else if (this.missingRecordsLimit < 0) {
                 System.out.println("Records limit must be >= 0, not " + this.missingRecordsLimit);
@@ -415,7 +410,7 @@ public class ClusterComparatorOptions {
                 System.out.printf("Action %s requires an input file but none was provided.\n", this.action);
             }
             else {
-                valid = true;
+                valid = !hasErrors;
             }
             if (this.action == Action.RERUN && remoteCacheSize > 0) {
                 System.out.println("Disabling caching from remote server when using RERUN as the action.");
@@ -429,6 +424,12 @@ public class ClusterComparatorOptions {
         }
     }
     
+    private void loadConfig(String fileName) throws Exception {
+        ObjectMapper mapper = YAMLMapper.builder().enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS).build();
+        mapper.findAndRegisterModules();
+        this.configOptions = mapper.readValue(new File(fileName), ConfigOptions.class);
+    }
+    
     public ClusterComparatorOptions(String[] arguments) throws Exception {
         Options options = formOptions();
         CommandLineParser parser = new DefaultParser();
@@ -438,6 +439,10 @@ public class ClusterComparatorOptions {
         if (cl.hasOption("usage")) {
             usage(options);
         }
+        if (cl.hasOption("configFile")) {
+            loadConfig(cl.getOptionValue("configFile"));
+        }
+
         this.silent = cl.hasOption("quiet");
         this.threads = Integer.valueOf(cl.getOptionValue("threads", "1"));
         this.startPartition = Integer.valueOf(cl.getOptionValue("startPartition", "0"));
@@ -458,10 +463,16 @@ public class ClusterComparatorOptions {
         this.userName2 = cl.getOptionValue("user2");
         this.password1 = cl.getOptionValue("password1");
         this.password2 = cl.getOptionValue("password2");
-        this.tlsPolicy1 = parseTlsPolicy(cl.getOptionValue("tls1"));
-        this.tlsPolicy2 = parseTlsPolicy(cl.getOptionValue("tls2"));
+        this.tlsOptions1 = parseTlsOptions(cl.getOptionValue("tls1"));
+        this.tlsOptions2 = parseTlsOptions(cl.getOptionValue("tls2"));
         this.authMode1 = AuthMode.valueOf(cl.getOptionValue("authMode1", "INTERNAL").toUpperCase());
         this.authMode2 = AuthMode.valueOf(cl.getOptionValue("authMode2", "INTERNAL").toUpperCase());
+//        if (cl.hasOption("clusterNames")) {
+//            this.clusterNames = cl.getOptionValue("clusterNames").split(",");
+//        }
+//        else {
+//            this.clusterNames = new String[] {cl.getOptionValue("clusterName1"), cl.getOptionValue("clusterName2")};
+//        }
         this.clusterName1 = cl.getOptionValue("clusterName1");
         this.clusterName2 = cl.getOptionValue("clusterName2");
         this.servicesAlternate1 = cl.hasOption("useServicesAlternate1");
@@ -506,7 +517,7 @@ public class ClusterComparatorOptions {
         if (ports.length == 2) {
             this.remoteServerHeartbeatPort = Integer.valueOf(ports[1]);
         }
-        this.remoteServerTls = parseTlsPolicy(cl.getOptionValue("remoteServerTls"));
+        this.remoteServerTls = parseTlsOptions(cl.getOptionValue("remoteServerTls")).toTlsPolicy();
         this.remoteCacheSize = Integer.valueOf(cl.getOptionValue("remoteCacheSize", "0"));
         this.remoteServerHashes = Boolean.valueOf(cl.getOptionValue("remoteServerHashes", "true"));
         this.verbose = cl.hasOption("verbose");
@@ -565,53 +576,68 @@ public class ClusterComparatorOptions {
         return rps;
     }
 
-    public String getHosts1() {
+    public List<ClusterConfig> getClusterConfigs() {
+        return this.clusters;
+    }
+    
+    public ConfigOptions getConfigOptions() {
+        return this.getConfigOptions();
+    }
+    
+    private String getHosts1() {
         return hosts1;
     }
 
-    public String getHosts2() {
+    private String getHosts2() {
         return hosts2;
     }
 
-    public String getUserName1() {
+    private String getUserName1() {
         return userName1;
     }
 
-    public String getUserName2() {
+    private String getUserName2() {
         return userName2;
     }
 
-    public String getPassword1() {
+    private String getPassword1() {
         return password1;
     }
 
-    public String getPassword2() {
+    private String getPassword2() {
         return password2;
     }
 
-    public TlsPolicy getTlsPolicy1() {
-        return tlsPolicy1;
+    private TlsOptions getTlsOptions1() {
+        return tlsOptions1;
     }
 
-    public TlsPolicy getTlsPolicy2() {
-        return tlsPolicy2;
+    private TlsOptions getTlsOptions2() {
+        return tlsOptions2;
     }
 
-    public AuthMode getAuthMode1() {
+    private AuthMode getAuthMode1() {
         return authMode1;
     }
 
-    public AuthMode getAuthMode2() {
+    private AuthMode getAuthMode2() {
         return authMode2;
     }
-    
-    public String getClusterName1() {
+    private String getClusterName1() {
         return clusterName1;
     }
     
-    public String getClusterName2() {
+    private String getClusterName2() {
         return clusterName2;
     }
+    private boolean isServicesAlternate1() {
+        return servicesAlternate1;
+    }
+    
+    private boolean isServicesAlternate2() {
+        return servicesAlternate2;
+    }
+
     public boolean isConsole() {
         return console;
     }
@@ -658,14 +684,6 @@ public class ClusterComparatorOptions {
     
     public boolean isMetadataCompare() {
         return metadataCompare;
-    }
-    
-    public boolean isServicesAlternate1() {
-        return servicesAlternate1;
-    }
-    
-    public boolean isServicesAlternate2() {
-        return servicesAlternate2;
     }
     
     public boolean isRemoteServer() {
