@@ -45,19 +45,19 @@ public class MetadataComparator {
                 List<Map<String, String>> nsDifferences2 = this.infoParser.invokeCommandReturningObjectOnAllNodes(clients[client2Index], "namespace/" + nsName);
                 this.filterOut(nsDifferences1, NS_FILTER_OUT);
                 this.filterOut(nsDifferences1, NS_FILTER_OUT);
-                this.removeMismatchesBetweenNodes(nsDifferences1, differenceSet, clients[client1Index].getNodeNames(), client1Index);
-                this.removeMismatchesBetweenNodes(nsDifferences2, differenceSet, clients[client2Index].getNodeNames(), client2Index);
+                this.removeMismatchesBetweenNodes(nsDifferences1, differenceSet, clients[client1Index].getNodeNames(), client1Index, client1Index, client2Index);
+                this.removeMismatchesBetweenNodes(nsDifferences2, differenceSet, clients[client2Index].getNodeNames(), client2Index, client1Index, client2Index);
                 RecordComparator comparator = new RecordComparator();
-                comparator.compare(nsDifferences1.get(0), nsDifferences2.get(0), differenceSet);
+                comparator.compare(nsDifferences1.get(0), nsDifferences2.get(0), differenceSet, client1Index, client2Index);
                 differenceSet.popPath(2);
                 namespaces2.remove(nsName);
             }
             else {
-                differenceSet.addDifference(nsName, DifferenceType.ONLY_ON_1, nsName, null);
+                differenceSet.addDifference(nsName, DifferenceType.ONLY_ON_1, nsName, null, client1Index, client2Index);
             }
         }
         for (String nsName : namespaces2) {
-            differenceSet.addDifference(nsName, DifferenceType.ONLY_ON_2, null, nsName);
+            differenceSet.addDifference(nsName, DifferenceType.ONLY_ON_2, null, nsName, client1Index, client2Index);
         }
     }
     
@@ -114,7 +114,7 @@ public class MetadataComparator {
         */
     }
     
-    private void removeMismatchesBetweenNodes(List<Map<String, String>> data, DifferenceSet differences, List<String> nodeNames, int cluster) {
+    private void removeMismatchesBetweenNodes(List<Map<String, String>> data, DifferenceSet differences, List<String> nodeNames, int cluster, int cluster1Index, int cluster2Index) {
         if (data == null || data.isEmpty()) {
             return;
         }
@@ -128,7 +128,7 @@ public class MetadataComparator {
             boolean allEqual = data.stream().allMatch(dataItem -> item0.equals(dataItem.get(key)));
             if (!allEqual) {
                 String mismatchString = new MismatchingOnCluster(key).addMismatchingValues(data, nodeNames, cluster).toString();
-                differences.addDifference(key, DifferenceType.CONTENTS, mismatchString, cluster);
+                differences.addDifference(key, DifferenceType.CONTENTS, mismatchString, cluster, cluster1Index, cluster2Index);
                 for (Map<String, String> thisMap : data) {
                     thisMap.remove(key);
                 }
@@ -142,10 +142,10 @@ public class MetadataComparator {
         List<Map<String, String>> client1Config = this.infoParser.invokeCommandReturningObjectOnAllNodes(client1, "get-config:context="+stanza);
         List<Map<String, String>> client2Config = this.infoParser.invokeCommandReturningObjectOnAllNodes(client2, "get-config:context="+stanza);
         differenceSet.pushPath(stanza);
-        removeMismatchesBetweenNodes(client1Config, differenceSet, client1.getNodeNames(), client1Index);
-        removeMismatchesBetweenNodes(client2Config, differenceSet, client2.getNodeNames(), client2Index);
+        removeMismatchesBetweenNodes(client1Config, differenceSet, client1.getNodeNames(), client1Index, client1Index, client2Index);
+        removeMismatchesBetweenNodes(client2Config, differenceSet, client2.getNodeNames(), client2Index, client1Index, client2Index);
         RecordComparator comparator = new RecordComparator();
-        comparator.compare(client1Config.get(0), client2Config.get(0), differenceSet);
+        comparator.compare(client1Config.get(0), client2Config.get(0), differenceSet, client1Index, client2Index);
         differenceSet.popPath();
     }
     

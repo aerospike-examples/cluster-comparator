@@ -21,15 +21,15 @@ public class RecordComparator {
                 Byte.TYPE.equals(clazz);
     }
 
-    private void compareNonNull(Object obj1, Object obj2, String path, DifferenceSet differences) {
+    private void compareNonNull(Object obj1, Object obj2, String path, DifferenceSet differences, int cluster1Index, int cluster2Index) {
         if (obj1 instanceof Map) {
             differences.pushPath(path);
-            compare((Map<Object, Object>)obj1, (Map<Object, Object>)obj2, differences);
+            compare((Map<Object, Object>)obj1, (Map<Object, Object>)obj2, differences, cluster1Index, cluster2Index);
             differences.popPath();
         }
         else if (obj1 instanceof List) {
             differences.pushPath(path);
-            compare((List<Object>)obj1, (List<Object>)obj2, differences);
+            compare((List<Object>)obj1, (List<Object>)obj2, differences, cluster1Index, cluster2Index);
             differences.popPath();
         } else if (obj1.getClass().isArray()) {
             Class<?> elementType = obj1.getClass().getComponentType();
@@ -37,29 +37,29 @@ public class RecordComparator {
                 // Byte arrays are natively supported
                 int mismatch = Arrays.mismatch((byte[])obj1, (byte[])obj2);
                 if (mismatch >= 0) {
-                    differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2, mismatch);
+                    differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2, mismatch, cluster1Index, cluster2Index);
                 }
             } else {
                 // TODO: Can we even get other arrays here?
             }
         }
         else if (!obj1.equals(obj2)){
-            differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2);
+            differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2, cluster1Index, cluster2Index);
         }
 
     }
 
-    private void compare(Object obj1, Object obj2, String path, DifferenceSet differences) {
+    private void compare(Object obj1, Object obj2, String path, DifferenceSet differences, int cluster1Index, int cluster2Index) {
         if (obj1 == null && obj2 == null) {
             return;
         } else if (obj1 == null) {
-            differences.addDifference(path, DifferenceType.ONLY_ON_2, obj1, obj2);
+            differences.addDifference(path, DifferenceType.ONLY_ON_2, obj1, obj2, cluster1Index, cluster2Index);
         } else if (obj2 == null) {
-            differences.addDifference(path, DifferenceType.ONLY_ON_1, obj1, obj2);
+            differences.addDifference(path, DifferenceType.ONLY_ON_1, obj1, obj2, cluster1Index, cluster2Index);
         } else if (!obj1.getClass().equals(obj2.getClass())) {
-            differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2);
+            differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2, cluster1Index, cluster2Index);
         } else {
-            compareNonNull(obj1, obj2, path, differences);
+            compareNonNull(obj1, obj2, path, differences, cluster1Index, cluster2Index);
         }
     }
 
@@ -103,14 +103,14 @@ public class RecordComparator {
         return hash;
     }
     
-    private void compare(List<?> list1, List<?> list2, DifferenceSet differences) {
+    private void compare(List<?> list1, List<?> list2, DifferenceSet differences, int cluster1index, int cluster2index) {
         EnumSet<PathAction> pathOptions = differences.getOptionsForCurrentPath();
         if (pathOptions != null && pathOptions.contains(PathAction.IGNORE)) {
             return;
         }
         if (pathOptions != null && pathOptions.contains(PathAction.COMPAREUNORDERED)) {
             if (list1.size() != list2.size()) {
-                differences.addDifference("", DifferenceType.CONTENTS, list1, list2);
+                differences.addDifference("", DifferenceType.CONTENTS, list1, list2, cluster1index, cluster2index);
             }
             else {
                 HashMap<Long, Integer> values = new HashMap<>();
@@ -129,7 +129,7 @@ public class RecordComparator {
                     long hash = getHashCode(list2.get(i), differences);
                     Integer count = values.get(hash);
                     if (count == null || count == 0) {
-                        differences.addDifference("", DifferenceType.CONTENTS, list1, list2);
+                        differences.addDifference("", DifferenceType.CONTENTS, list1, list2, cluster1index, cluster2index);
                         checkSize = false;
                         break;
                     }
@@ -142,7 +142,7 @@ public class RecordComparator {
                 }
                 if (checkSize && !values.isEmpty()) {
                     // There are values missing
-                    differences.addDifference("", DifferenceType.CONTENTS, list1, list2);
+                    differences.addDifference("", DifferenceType.CONTENTS, list1, list2, cluster1index, cluster2index);
                 }
             }
         }
@@ -151,7 +151,7 @@ public class RecordComparator {
             for (int i = 0; i < max; i++) {
                 Object o1 = (i < list1.size()) ? list1.get(i) : null;
                 Object o2 = (i < list2.size()) ? list2.get(i) : null;
-                compare(o1, o2, Integer.toString(i), differences);
+                compare(o1, o2, Integer.toString(i), differences, cluster1index, cluster2index);
                 if (differences.isQuickCompare() && differences.areDifferent()) {
                     return;
                 }
@@ -159,7 +159,7 @@ public class RecordComparator {
         }
     }
 
-    public void compare(Map<?, ?> side1, Map<?, ?> side2, DifferenceSet differences) {
+    public void compare(Map<?, ?> side1, Map<?, ?> side2, DifferenceSet differences, int cluster1index, int cluster2index) {
         if (differences.shouldIgnoreCurrentPath()) {
             return;
         }
@@ -167,14 +167,14 @@ public class RecordComparator {
         Set<Object> keys = new HashSet<>();
         for (Object key : side1.keySet()) {
             keys.add(key);
-            compare(side1.get(key), side2.get(key), key.toString(), differences);
+            compare(side1.get(key), side2.get(key), key.toString(), differences, cluster1index, cluster2index);
             if (differences.isQuickCompare() && differences.areDifferent()) {
                 return;
             }
         }
         for (Object key : side2.keySet()) {
             if (!keys.contains(key)) {
-                compare(side1.get(key), side2.get(key), key.toString(), differences);
+                compare(side1.get(key), side2.get(key), key.toString(), differences, cluster1index, cluster2index);
                 if (differences.isQuickCompare() && differences.areDifferent()) {
                     return;
                 }
@@ -182,23 +182,23 @@ public class RecordComparator {
         }
     }
 
-    public DifferenceSet compare(Key key, Record record1, Record record2, PathOptions pathOptions, boolean stopAtFirstDifference) {
+    public DifferenceSet compare(Key key, Record record1, Record record2, PathOptions pathOptions, boolean stopAtFirstDifference, int cluster1index, int cluster2index) {
         Map<?, ?> map1 = (Map<?, ?>)record1.bins;
         Map<?, ?> map2 = record2.bins;
 
         DifferenceSet result = new DifferenceSet(key, stopAtFirstDifference, pathOptions);
         result.pushPath(key.namespace);
         result.pushPath(key.setName);
-        compare(map1, map2, result);
+        compare(map1, map2, result, cluster1index, cluster2index);
         result.popPath();
         result.popPath();
         return result;
     }
-    public DifferenceSet compare(Key key, byte[] record1hash, byte[] record2hash, PathOptions pathOptions) {
+    public DifferenceSet compare(Key key, byte[] record1hash, byte[] record2hash, PathOptions pathOptions, int cluster1index, int cluster2index) {
         DifferenceSet result = new DifferenceSet(key, true, pathOptions);
         result.pushPath(key.namespace);
         result.pushPath(key.setName);
-        compare(record1hash, record2hash, "", result);
+        compare(record1hash, record2hash, "", result, cluster1index, cluster2index);
         result.popPath();
         result.popPath();
         return result;

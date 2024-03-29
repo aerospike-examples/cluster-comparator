@@ -472,14 +472,14 @@ public class ClusterComparator {
         }
     }
 
-    private void compareRecord(RecordComparator comparator, int partitionId, AerospikeClientAccess client1, AerospikeClientAccess client2, RecordSetAccess recordSet1, RecordSetAccess recordSet2, Key key1, Key key2) {
+    private void compareRecord(RecordComparator comparator, int partitionId, AerospikeClientAccess client1, AerospikeClientAccess client2, RecordSetAccess recordSet1, RecordSetAccess recordSet2, Key key1, Key key2, int cluster1index, int cluster2index) {
         DifferenceSet compareResult = null;
         if ((client1.isLocal() && client2.isLocal()) || !options.isRemoteServerHashes()) {
             Record record1 = recordSet1.getRecord();
             Record record2 = recordSet2.getRecord();
             compareResult = comparator.compare(key1, record1, record2,
                     options.getPathOptions(),
-                    options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
+                    options.getCompareMode() == CompareMode.RECORDS_DIFFERENT, cluster1index, cluster2index);
         }
         else {
             byte[] record1hash = recordSet1.getRecordHash(options.isSortMaps());
@@ -488,13 +488,13 @@ public class ClusterComparator {
             if (recordsEqual != 0) {
                 if (options.getCompareMode() == CompareMode.RECORDS_DIFFERENT) {
                     compareResult = comparator.compare(key1, record1hash, record2hash,
-                            options.getPathOptions());
+                            options.getPathOptions(), cluster1index, cluster2index);
                 }
                 else {
                     Record record1 = client1.isLocal() ? recordSet1.getRecord() : client1.get(null, key1);
                     Record record2 = client2.isLocal() ? recordSet2.getRecord() : client2.get(null, key2);
                     compareResult = comparator.compare(key1, record1, record2,
-                            options.getPathOptions(), false);
+                            options.getPathOptions(), false, cluster1index, cluster2index);
                 }
             }
         }
@@ -515,7 +515,8 @@ public class ClusterComparator {
                 compareRecord(comparator, partitionId,
                         clients[left], clients[right],
                         recordSets[left], recordSets[right],
-                        keys[left], keys[right]
+                        keys[left], keys[right],
+                        left, right
                 );
             }
         }
@@ -628,7 +629,7 @@ public class ClusterComparator {
                                 int right = clustersWithRecord.get(j);
                                 compareResult = comparator.compare(key, records[left], records[right],
                                         options.getPathOptions(),
-                                        options.getCompareMode() == CompareMode.RECORDS_DIFFERENT);
+                                        options.getCompareMode() == CompareMode.RECORDS_DIFFERENT, left, right);
                                 if (compareResult != null && compareResult.areDifferent()) {
                                     differentRecords(partId, key, null, null, compareResult);
                                 }

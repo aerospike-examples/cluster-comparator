@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.command.Buffer;
+import com.aerospike.client.lua.LuaStreamLib.write;
 
 public class CsvDifferenceHandler implements MissingRecordHandler, RecordDifferenceHandler {
     public final String FILE_HEADER;
@@ -31,6 +32,8 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
             sb.append("Digest").append(i+1).append(',');
         }
         this.FILE_HEADER = sb.append("Diffs").toString();
+        writer.println(FILE_HEADER);
+        writer.flush();
     }
     
     public String getFileHeader() {
@@ -57,7 +60,8 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
     @Override
     public synchronized void handle(int partitionId, Key key, Record side1, Record side2, DifferenceSet differences)
             throws IOException {
-        String differencesString = differences.getAsJson();
+        // Do not show the whole binary blob
+        String differencesString = differences.getAsJson(true);
         // We have to manipulate this to make it valid CSV. Any double quotes become
         // double double quote, then put the whole thing in double quotes.
         differencesString = differencesString.replaceAll("\"", "\"\"");

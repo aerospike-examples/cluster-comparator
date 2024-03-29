@@ -71,14 +71,14 @@ public class DifferenceSet {
         return sb.toString();
     }
 
-    public void addDifference(String path, DifferenceType difference, Object obj1, Object obj2) {
+    public void addDifference(String path, DifferenceType difference, Object obj1, Object obj2, int cluster1, int cluster2) {
         String fullPath = pathParts.size() == 0 ? path : this.getCurrentPath() + path;
-        this.differences.put(fullPath, new DifferenceValue(difference, obj1, obj2));
+        this.differences.put(fullPath, new DifferenceValue(difference, obj1, obj2, cluster1, cluster2));
     }
 
-    public void addDifference(String path, DifferenceType difference, Object obj1, Object obj2, int index) {
+    public void addDifference(String path, DifferenceType difference, Object obj1, Object obj2, int index, int cluster1, int cluster2) {
         String fullPath = pathParts.size() == 0 ? path : this.getCurrentPath() + path;
-        this.differences.put(fullPath, new DifferenceValue(difference, obj1, obj2, index));
+        this.differences.put(fullPath, new DifferenceValue(difference, obj1, obj2, index, cluster1, cluster2));
     }
     public Map<String, DifferenceValue> getDifferences() {
         return differences;
@@ -92,10 +92,12 @@ public class DifferenceSet {
         return quickCompare;
     }
     
-    public String getAsJson() {
+    public String getAsJson(boolean truncateBinary) {
         StringBuilder sb = new StringBuilder().append("[");
         for (String key : differences.keySet()) {
-            sb.append("{\"path\":").append('"').append(key).append("\",").append(differences.get(key).asJsonFragment()).append("},");
+            sb.append("{\"path\":").append('"').append(key).append("\",");
+            sb.append(differences.get(key).asJsonFragment(truncateBinary));
+            sb.append("},");
         }
         int index = sb.lastIndexOf(",");
         if (index > 0) {
@@ -109,7 +111,7 @@ public class DifferenceSet {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         for (String key : differences.keySet()) {
-            sb.append(key).append(": ").append(differences.get(key)).append("\n");
+            sb.append(key).append(": ").append(differences.get(key));
         }
         return sb.toString();
     }

@@ -70,7 +70,7 @@ public class ListTest {
         differences = comparator.begin();
         assertFalse(differences.areDifferent());
         
-        // Now re-create a comparator, doing list compares of unordered in an unordered fashiop
+        // Now re-create a comparator, doing list compares of unordered in an unordered fashion
         options.setPathOptions(new PathOptions(new PathOption("/test/testSet/unordered", PathAction.COMPAREUNORDERED)));
         comparator = new ClusterComparator(options);
         differences = comparator.begin();

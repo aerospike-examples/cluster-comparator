@@ -2,6 +2,7 @@ package com.aerospike.comparator;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
@@ -11,7 +12,8 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
     
     @Override
     public void handle(int partitionId, Key key, List<Integer> missingFromClusters) throws IOException {
-        System.out.printf("%s,%s,%s,%s\n",key.namespace,key.setName, key.userKey, missingFromClusters);
+        System.out.printf("MISSING RECORD:(%s,%s,%s,%s) Missing from clusters %s\n",key.namespace,key.setName, key.userKey, Buffer.bytesToHexString(key.digest), 
+                missingFromClusters.stream().map(i->i+1).collect(Collectors.toList()));
     }
 
     @Override

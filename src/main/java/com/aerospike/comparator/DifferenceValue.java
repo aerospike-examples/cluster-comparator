@@ -6,16 +6,20 @@ public class DifferenceValue {
     private final DifferenceType type;
     private final Object obj1;
     private final Object obj2;
+    private final int cluster1;
+    private final int cluster2;
     private final int index;
     
-    public DifferenceValue(DifferenceType type, Object obj1, Object obj2) {
-        this(type, obj1, obj2, -1);
+    public DifferenceValue(DifferenceType type, Object obj1, Object obj2, int cluster1, int cluster2) {
+        this(type, obj1, obj2, -1, cluster1, cluster2);
     }
-    public DifferenceValue(DifferenceType type, Object obj1, Object obj2, int index) {
+    public DifferenceValue(DifferenceType type, Object obj1, Object obj2, int index, int cluster1, int cluster2) {
         this.type = type;
         this.obj1 = obj1;
         this.obj2 = obj2;
         this.index = index;
+        this.cluster1 = cluster1;
+        this.cluster2 = cluster2;
     }
     public DifferenceType getType() {
         return type;
@@ -27,14 +31,14 @@ public class DifferenceValue {
         return obj2;
     }
     
-    public String asJsonFragment() {
+    public String asJsonFragment(boolean truncateBinary) {
         StringBuffer sb = new StringBuffer();
         sb.append("\"type\":\"").append(this.type).append('"');
         if (obj1 != null) {
-            sb.append(",\"side1\":").append(this.showObject(obj1, true));
+            sb.append(",\"cluster").append(cluster1+1).append("\":").append(this.showObject(obj1, true, truncateBinary));
         }
         if (obj2 != null) {
-            sb.append(",\"side2\":").append(this.showObject(obj2, true));
+            sb.append(",\"cluster").append(cluster2+1).append("\":").append(this.showObject(obj2, true, truncateBinary));
         }
         if (this.index >= 0) {
             sb.append(",\"index\":").append(this.index);
@@ -74,10 +78,10 @@ public class DifferenceValue {
     }
     
     private String showObject(Object obj) {
-        return showObject(obj, false);
+        return showObject(obj, false, false);
     }
     
-    private String showObject(Object obj, boolean asJson) {
+    private String showObject(Object obj, boolean asJson, boolean truncateBinary) {
         if (obj == null) {
             return "<null>";
         }
@@ -88,7 +92,12 @@ public class DifferenceValue {
             Class<?> elementType = obj.getClass().getComponentType();
             if (RecordComparator.isByteType(elementType)) {
                 if (asJson) {
-                    return showByteArrayAsJson((byte[])obj);
+                    if (truncateBinary) {
+                        return "\"" + showByteArray((byte[])obj) +"\"";
+                    }
+                    else {
+                        return showByteArrayAsJson((byte[])obj);
+                    }
                 }
                 else {
                     return showByteArray((byte[])obj);
@@ -99,6 +108,8 @@ public class DifferenceValue {
     }
     @Override
     public String toString() {
-        return String.format("{type: %s, side1: %s, side2: %s}", this.getType(), this.showObject(this.getObj1()), this.showObject(this.getObj2()));
+        return String.format("{type: %s, cluster%d: %s, cluster%d: %s}", this.getType(), 
+                this.cluster1+1, this.showObject(this.getObj1()), 
+                this.cluster2+1, this.showObject(this.getObj2()));
     }
 }
