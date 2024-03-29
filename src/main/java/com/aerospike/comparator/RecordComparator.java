@@ -1,6 +1,5 @@
 package com.aerospike.comparator;
 
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +20,22 @@ public class RecordComparator {
                 Byte.TYPE.equals(clazz);
     }
 
+    // Implementation of Arrays.mismatch to allow compiling with Java 8
+    private int arrayMismatch(byte[] a, byte[] b) {
+        int length = Math.min(a.length, b.length); // Check null array refs
+        if (a == b) {
+            return -1;
+        }
+        int index = -1;
+        for (int i = 0; i < length; i++) {
+            if (a[i] != b[i]) {
+                index = i;
+                break;
+            }
+        }
+        return (index < 0 && a.length != b.length) ? length : index;
+    }
+    
     private void compareNonNull(Object obj1, Object obj2, String path, DifferenceSet differences, int cluster1Index, int cluster2Index) {
         if (obj1 instanceof Map) {
             differences.pushPath(path);
@@ -35,7 +50,7 @@ public class RecordComparator {
             Class<?> elementType = obj1.getClass().getComponentType();
             if (isByteType(elementType)) {
                 // Byte arrays are natively supported
-                int mismatch = Arrays.mismatch((byte[])obj1, (byte[])obj2);
+                int mismatch = arrayMismatch((byte[])obj1, (byte[])obj2);
                 if (mismatch >= 0) {
                     differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2, mismatch, cluster1Index, cluster2Index);
                 }

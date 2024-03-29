@@ -28,10 +28,14 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         }
         this.numberOfClusters = numberOfClusters;
         StringBuffer sb = new StringBuffer().append("Namespace,Set,Key,");
+        if (numberOfClusters != 2) {
+            sb.append("Number of Clusters").append(',');
+        }
         for (int i = 0; i < numberOfClusters; i++) {
             sb.append("Digest").append(i+1).append(',');
         }
         this.FILE_HEADER = sb.append("Diffs").toString();
+
         writer.println(FILE_HEADER);
         writer.flush();
     }

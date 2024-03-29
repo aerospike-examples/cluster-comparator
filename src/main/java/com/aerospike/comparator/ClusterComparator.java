@@ -501,7 +501,8 @@ public class ClusterComparator {
         if (compareResult != null && compareResult.areDifferent()) {
             differentRecords(partitionId, key2, null, null, compareResult);
         }
-        if (options.getRecordCompareLimit() > 0 && totalRecordsCompared.incrementAndGet() >= options.getRecordCompareLimit()) {
+        long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+        if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
             forceTerminate = true;
         }
 
@@ -633,7 +634,8 @@ public class ClusterComparator {
                                 if (compareResult != null && compareResult.areDifferent()) {
                                     differentRecords(partId, key, null, null, compareResult);
                                 }
-                                if (options.getRecordCompareLimit() > 0 && totalRecordsCompared.incrementAndGet() >= options.getRecordCompareLimit()) {
+                                long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+                                if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
                                     forceTerminate = true;
                                 }
                             }
@@ -663,6 +665,7 @@ public class ClusterComparator {
                         System.out.printf("Quick compare found %d partitions different\n", partitionsToCompare.size());
                     }
                 }
+                return;
             }
             catch (AerospikeException ae) {
                 if (ae.getResultCode() == ResultCode.ROLE_VIOLATION) {
@@ -737,7 +740,6 @@ public class ClusterComparator {
                 System.out.println("Comparison started for namespace " + namespace + ((setName == null) ?  "." : (", set " + setName + ".")));
             }
         }
-        int numberOfClusters = options.getClusterConfigs().size();
         long[] lastRecordsForCluster = new long[numberOfClusters];
         long[] currentRecordsForCluster = new long[numberOfClusters];
         forEachCluster((i, c) -> lastRecordsForCluster[i] = 0);
@@ -771,6 +773,7 @@ public class ClusterComparator {
                         recordsThisSecond/numberOfClusters,
                         (totalCurrentRecords)*1000/2/elapsedMilliseconds);
             }
+            forEachCluster((i, c) -> lastRecordsForCluster[i] = currentRecordsForCluster[i]);
         }
         this.executor.awaitTermination(7, TimeUnit.DAYS);
         
