@@ -111,7 +111,7 @@ public class DifferenceSet {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         for (String key : differences.keySet()) {
-            sb.append(key).append(": ").append(differences.get(key));
+            sb.append(key).append(": ").append(differences.get(key)).append(" ");
         }
         return sb.toString();
     }
