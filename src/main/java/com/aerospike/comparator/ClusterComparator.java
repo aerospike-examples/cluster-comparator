@@ -92,7 +92,7 @@ public class ClusterComparator {
         }
 
         @Override
-        public void handle(int partitionId, Key key, Record side1, Record side2, DifferenceSet differences)
+        public void handle(int partitionId, Key key, Record side1, Record side2, DifferenceCollection differences)
                 throws IOException {
             recordsDifferentCount.incrementAndGet();
             checkDifferencesCount();
@@ -121,7 +121,7 @@ public class ClusterComparator {
             this.recordDifferenceHandlers.add(consoleHandler);
         }
         if (options.getOutputFileName() != null && options.getAction() != Action.TOUCH && options.getAction() != Action.READ ) {
-            CsvDifferenceHandler csvHandler = new CsvDifferenceHandler(options.getOutputFileName(), numberOfClusters);
+            CsvDifferenceHandler csvHandler = new CsvDifferenceHandler(options.getOutputFileName(), options);
             this.missingRecordHandlers.add(csvHandler);
             this.recordDifferenceHandlers.add(csvHandler);
         }
@@ -136,7 +136,7 @@ public class ClusterComparator {
         }
     }
 
-    private void addInPartitions(StringBuffer sb, int runCount, int current) {
+    private void addInPartitions(StringBuilder sb, int runCount, int current) {
         if (sb.length() > 1 && runCount > 0) {
             sb.append(',');
         }
@@ -149,7 +149,7 @@ public class ClusterComparator {
     }
     
     private String getPartitionsComplete() {
-        StringBuffer sb = new StringBuffer().append('[');
+        StringBuilder sb = new StringBuilder().append('[');
         int partitionCount = endPartition - startPartition;
         int runCount = 0;
         for (int i = 0; i < partitionCount; i++) {
@@ -288,11 +288,11 @@ public class ClusterComparator {
         }
         return 0;
     }
-    
-    private void differentRecords(int partitionId, Key key, Record record1, Record record2, DifferenceSet differences) {
+
+    private void differentRecords(int partitionId, Key key, DifferenceCollection differences) {
         for (RecordDifferenceHandler thisHandler : recordDifferenceHandlers) {
             try {
-                thisHandler.handle(partitionId, key, record1, record2, differences);
+                thisHandler.handle(partitionId, key, null, null, differences);
             }
             catch (Exception e) {
                 System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
@@ -301,6 +301,19 @@ public class ClusterComparator {
             }
         }
     }
+
+//    private void differentRecords(int partitionId, Key key, Record record1, Record record2, DifferenceSet differences) {
+//        for (RecordDifferenceHandler thisHandler : recordDifferenceHandlers) {
+//            try {
+//                thisHandler.handle(partitionId, key, record1, record2, differences);
+//            }
+//            catch (Exception e) {
+//                System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
+//                e.printStackTrace();
+//                this.forceTerminate = true;
+//            }
+//        }
+//    }
     private void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, int partitionId, Key keyMissing) {
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
             try {
@@ -349,7 +362,7 @@ public class ClusterComparator {
             // Both are non-null
             return Exp.build(Exp.and(
                     Exp.le(Exp.lastUpdate(), Exp.val(TimeUnit.MILLISECONDS.toNanos(this.options.getEndDate().getTime()))), 
-                    Exp.ge(Exp.lastUpdate(), Exp.val(TimeUnit.MILLISECONDS.toNanos(this.options.getEndDate().getTime())))));
+                    Exp.ge(Exp.lastUpdate(), Exp.val(TimeUnit.MILLISECONDS.toNanos(this.options.getBeginDate().getTime())))));
         }
     }
     
@@ -394,6 +407,7 @@ public class ClusterComparator {
         Statement statement = new Statement();
         statement.setNamespace(namespace);
         statement.setSetName(setName);
+
         int rpsThisThread = options.getRps()/this.threadsToUse;
         if (options.getRps() > 0 && rpsThisThread == 0) {
             // Eg 10 threads, 5 rps would give 0
@@ -472,7 +486,7 @@ public class ClusterComparator {
         }
     }
 
-    private void compareRecord(RecordComparator comparator, int partitionId, AerospikeClientAccess client1, AerospikeClientAccess client2, RecordSetAccess recordSet1, RecordSetAccess recordSet2, Key key1, Key key2, int cluster1index, int cluster2index) {
+    private void compareRecord(DifferenceCollection differenceCollection, RecordComparator comparator, int partitionId, AerospikeClientAccess client1, AerospikeClientAccess client2, RecordSetAccess recordSet1, RecordSetAccess recordSet2, Key key1, Key key2, int cluster1index, int cluster2index) {
         DifferenceSet compareResult = null;
         if ((client1.isLocal() && client2.isLocal()) || !options.isRemoteServerHashes()) {
             Record record1 = recordSet1.getRecord();
@@ -498,28 +512,30 @@ public class ClusterComparator {
                 }
             }
         }
-        if (compareResult != null && compareResult.areDifferent()) {
-            differentRecords(partitionId, key2, null, null, compareResult);
-        }
-        long totalRecsCompared = totalRecordsCompared.incrementAndGet();
-        if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
-            forceTerminate = true;
-        }
-
+        differenceCollection.add(compareResult);
     }
-    private DifferenceSet compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys) {
-        DifferenceSet compareResult = null;
+    
+    private DifferenceCollection compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys) {
+        DifferenceCollection compareResult = new DifferenceCollection(clustersToCompare);
         for (int i = 0; i < clustersToCompare.size(); i++) {
             for (int j = i+1; j < clustersToCompare.size(); j++) {
                 int left = clustersToCompare.get(i);
                 int right = clustersToCompare.get(j);
-                compareRecord(comparator, partitionId,
+                compareRecord(compareResult, comparator, partitionId,
                         clients[left], clients[right],
                         recordSets[left], recordSets[right],
                         keys[left], keys[right],
                         left, right
                 );
             }
+        }
+        
+        if (compareResult.hasDifferences()) {
+            differentRecords(partitionId, keys[0], compareResult);
+        }
+        long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+        if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
+            forceTerminate = true;
         }
         return compareResult;
     }
@@ -624,6 +640,7 @@ public class ClusterComparator {
                         }
                         missingRecord(clients, clustersWithRecord, clustersWithoutRecord, partId, key);
                         // For those with the record, iterate through all clusters with the record and compare them.
+                        DifferenceCollection differenceCollection = new DifferenceCollection(clustersWithRecord);
                         for (int i = 0; i < clustersWithRecord.size(); i++) {
                             for (int j = i+1; j < clustersWithRecord.size(); j++) {
                                 int left = clustersWithRecord.get(i);
@@ -631,15 +648,17 @@ public class ClusterComparator {
                                 compareResult = comparator.compare(key, records[left], records[right],
                                         options.getPathOptions(),
                                         options.getCompareMode() == CompareMode.RECORDS_DIFFERENT, left, right);
-                                if (compareResult != null && compareResult.areDifferent()) {
-                                    differentRecords(partId, key, null, null, compareResult);
-                                }
-                                long totalRecsCompared = totalRecordsCompared.incrementAndGet();
-                                if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
-                                    forceTerminate = true;
-                                }
+                                differenceCollection.add(compareResult);
                             }
                         }
+                        if (differenceCollection.hasDifferences()) {
+                            differentRecords(partId, key, differenceCollection);
+                        }
+                        long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+                        if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
+                            forceTerminate = true;
+                        }
+                        
                     }
                 }
             }
@@ -910,7 +929,7 @@ public class ClusterComparator {
         
         try {
             String line = br.readLine();
-            CsvDifferenceHandler handler = new CsvDifferenceHandler(null, numberOfClusters);
+            CsvDifferenceHandler handler = new CsvDifferenceHandler(null, options);
             if (!handler.getFileHeader().equals(line)) {
                 throw new UnsupportedOperationException("File " + options.getOutputFileName() + " has a header which does not match what was expected. Expected '" + handler.getFileHeader() + "' but received '" + line + "'");
             }
@@ -947,6 +966,19 @@ public class ClusterComparator {
                     String.join(",", this.options.getNamespaces()),
                     this.options.getSetNames() == null ? "null" : String.join(",", this.options.getSetNames()),
                     this.options.getStartPartition(), this.options.getEndPartition());
+            if (options.getBeginDate() != null && options.getEndDate() != null) {
+                System.out.printf("  Looking only for records between %s (%,d) and %s (%d)", 
+                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate(),
+                        options.getDateFormat().format(options.getEndDate()), options.getEndDate());
+            }
+            else if (options.getBeginDate() != null) {
+                System.out.printf("  Looking only for records after %s (%,d)", 
+                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate());
+            }
+            else if (options.getEndDate() != null) {
+                System.out.printf("  Looking only for records before %s (%,d)", 
+                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate());
+            }
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());
         }

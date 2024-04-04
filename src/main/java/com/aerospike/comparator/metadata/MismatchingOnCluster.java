@@ -34,7 +34,7 @@ public class MismatchingOnCluster {
     
     @Override
     public String toString() {
-        StringBuffer sb = new StringBuffer(name).append(" differs on cluster ").append(cluster).append(". ");
+        StringBuilder sb = new StringBuilder(name).append(" differs on cluster ").append(cluster).append(". ");
         for (String nodeName : values.keySet()) {
             sb.append(nodeName).append('=').append(values.get(nodeName)).append(';');
         }

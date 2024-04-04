@@ -82,7 +82,7 @@ public class NamedMatrix<T> {
     
     @Override
     public String toString() {
-        StringBuffer sb = new StringBuffer(1000).append('{');
+        StringBuilder sb = new StringBuilder(1000).append('{');
         int rowSize = this.matrixData.size();
         int rowCount = 0;
         for (String rowName : this.matrixData.keySet()) {

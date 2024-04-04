@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.aerospike.timf</groupId>
   <artifactId>ClusterComparator</artifactId>
-  <version>1.1.0</version>
+  <version>1.1.1</version>
   <name>Cluster Comparator</name>
   <description>Find differences between 2 difference Aerospike clusters.</description>
   
@@ -46,7 +46,7 @@
 		    <artifactId>sslcontext-kickstart-for-pem</artifactId>
 		    <version>8.1.1</version>
 		</dependency>
-	</dependencies>
+  </dependencies>
 	<build>
 		<plugins>
 			<plugin>

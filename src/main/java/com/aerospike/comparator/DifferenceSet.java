@@ -12,6 +12,7 @@ import com.aerospike.comparator.RecordComparator.DifferenceType;
 
 public class DifferenceSet {
     private final Deque<String> pathParts = new ArrayDeque<>();
+    // Differences in the record, keyed by the path. 
     private final Map<String, DifferenceValue> differences = new HashMap<>();
     private final Key key;
     private final boolean quickCompare;
@@ -64,7 +65,7 @@ public class DifferenceSet {
     }
 
     protected String getCurrentPath() {
-        StringBuffer sb = new StringBuffer(1000);
+        StringBuilder sb = new StringBuilder(1000);
         for (Iterator<String> iter = pathParts.descendingIterator(); iter.hasNext();) {
             sb.append(iter.next()).append("/");
         }
@@ -92,7 +93,7 @@ public class DifferenceSet {
         return quickCompare;
     }
     
-    public String getAsJson(boolean truncateBinary) {
+    public String getAsJson(boolean truncateBinary, ClusterComparatorOptions options) {
         StringBuilder sb = new StringBuilder().append("[");
         for (String key : differences.keySet()) {
             sb.append("{\"path\":").append('"').append(key).append("\",");

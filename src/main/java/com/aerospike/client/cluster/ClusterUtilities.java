@@ -137,7 +137,7 @@ public class ClusterUtilities {
                 Set<Integer> parts = replicaToParts.get(i);
                 List<Integer> partList = new ArrayList<>(parts);
                 Collections.sort(partList);
-                StringBuffer buffer = new StringBuffer();
+                StringBuilder buffer = new StringBuilder();
                 int lastOutput = -5;
                 int runCount = 0;
                 for (int k = 0; k < partList.size(); k++) {
@@ -187,7 +187,7 @@ public class ClusterUtilities {
             return "";
         }
         else {
-            StringBuffer sb = new StringBuffer(1000);
+            StringBuilder sb = new StringBuilder(1000);
             sb.append(" RackIds: ");
             for (String namespace : rackMap.keySet()) {
                 sb.append(namespace).append("->").append(rackMap.get(namespace));

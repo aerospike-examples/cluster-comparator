@@ -61,7 +61,6 @@ public class RecordComparator {
         else if (!obj1.equals(obj2)){
             differences.addDifference(path, DifferenceType.CONTENTS, obj1, obj2, cluster1Index, cluster2Index);
         }
-
     }
 
     private void compare(Object obj1, Object obj2, String path, DifferenceSet differences, int cluster1Index, int cluster2Index) {

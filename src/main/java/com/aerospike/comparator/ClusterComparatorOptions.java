@@ -25,7 +25,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
  * @author tfaulkes
  *
  */
-public class ClusterComparatorOptions {
+public class ClusterComparatorOptions implements ClusterNameResolver {
     private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-hh:mm:ssZ";
     public static enum Action {
         SCAN(false, true),
@@ -100,6 +100,7 @@ public class ClusterComparatorOptions {
     private boolean debug = false;
     private boolean sortMaps = false;
     private ConfigOptions configOptions = null;
+    private boolean binsOnly = false;
     
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -291,6 +292,7 @@ public class ClusterComparatorOptions {
                 + "unless using a remote server with RECORDS_DIFFERENT mode and remoteServerHashes set to true.");
         options.addOption("i", "inputFile", true, "Specify an input file for records to compare. This is only used with the RERUN, READ and TOUCH actions and is "
                 + "typically set to the output file of a previous run.");
+        options.addOption(null, "binsOnly", false, "When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the full differences, just the bin names which are different");
         return options;
     }
 
@@ -422,7 +424,6 @@ public class ClusterComparatorOptions {
         Options options = formOptions();
         CommandLineParser parser = new DefaultParser();
         CommandLine cl = parser.parse(options, arguments, false);
-        SimpleDateFormat sdf = null;
         
         if (cl.hasOption("usage")) {
             usage(options);
@@ -455,12 +456,6 @@ public class ClusterComparatorOptions {
         this.tlsOptions2 = parseTlsOptions(cl.getOptionValue("tls2"));
         this.authMode1 = AuthMode.valueOf(cl.getOptionValue("authMode1", "INTERNAL").toUpperCase());
         this.authMode2 = AuthMode.valueOf(cl.getOptionValue("authMode2", "INTERNAL").toUpperCase());
-//        if (cl.hasOption("clusterNames")) {
-//            this.clusterNames = cl.getOptionValue("clusterNames").split(",");
-//        }
-//        else {
-//            this.clusterNames = new String[] {cl.getOptionValue("clusterName1"), cl.getOptionValue("clusterName2")};
-//        }
         this.clusterName1 = cl.getOptionValue("clusterName1");
         this.clusterName2 = cl.getOptionValue("clusterName2");
         this.servicesAlternate1 = cl.hasOption("useServicesAlternate1");
@@ -469,7 +464,7 @@ public class ClusterComparatorOptions {
         this.missingRecordsLimit = Long.valueOf(cl.getOptionValue("limit", "0"));
         this.compareMode = CompareMode.valueOf(cl.getOptionValue("compareMode", CompareMode.MISSING_RECORDS.toString()).toUpperCase());
         if (cl.hasOption("dateFormat")) {
-            sdf = new SimpleDateFormat(cl.getOptionValue("dateFormat"));
+            this.dateFormat = new SimpleDateFormat(cl.getOptionValue("dateFormat"));
         }
         if (cl.hasOption("beginDate")) {
             String value = cl.getOptionValue("beginDate");
@@ -477,7 +472,7 @@ public class ClusterComparatorOptions {
                 this.beginDate = new Date(Long.parseLong(value));
             }
             else {
-                this.beginDate = sdf.parse(value);
+                this.beginDate = this.dateFormat.parse(value);
             }
         }
         if (cl.hasOption("endDate")) {
@@ -486,7 +481,7 @@ public class ClusterComparatorOptions {
                 this.beginDate = new Date(Long.parseLong(value));
             }
             else {
-                this.beginDate = sdf.parse(value);
+                this.beginDate = this.dateFormat.parse(value);
             }
         }
         String pathOptionsFile = cl.getOptionValue("pathOptionsFile");
@@ -526,10 +521,23 @@ public class ClusterComparatorOptions {
             System.out.println("Remote caching is incompatible with QUICK_NAMESPACE mode, turning off caching.");
             this.remoteCacheSize = 0;
         }
-
+        this.binsOnly = cl.hasOption("binsOnly");
         this.validate(options);
     }
 
+    public String clusterIdToName(int id) {
+        if (id < 0 || id >= this.getClusterConfigs().size()) {
+            throw new IllegalArgumentException(String.format("cluster id must be in the range of 0 to %d, not %d", this.getClusterConfigs().size()-1, id));
+        }
+        String name = this.getClusterConfigs().get(id).getClusterName();
+        if (name != null && !name.isEmpty()) {
+            return name;
+        }
+        else {
+            return Integer.toString(id+1);
+        }
+    }
+    
     public boolean isSilent() {
         return silent;
     }
@@ -714,6 +722,10 @@ public class ClusterComparatorOptions {
     
     public String getInputFileName() {
         return inputFileName;
+    }
+    
+    public boolean isBinsOnly() {
+        return binsOnly;
     }
 }
 

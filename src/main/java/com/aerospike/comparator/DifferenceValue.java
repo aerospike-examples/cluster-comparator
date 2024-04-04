@@ -32,7 +32,7 @@ public class DifferenceValue {
     }
     
     public String asJsonFragment(boolean truncateBinary) {
-        StringBuffer sb = new StringBuffer();
+        StringBuilder sb = new StringBuilder();
         sb.append("\"type\":\"").append(this.type).append('"');
         if (obj1 != null) {
             sb.append(",\"cluster").append(cluster1+1).append("\":").append(this.showObject(obj1, true, truncateBinary));
@@ -47,7 +47,7 @@ public class DifferenceValue {
     }
     
     private String showByteArray(byte[] bytes) {
-        StringBuffer sb = new StringBuffer().append("[");
+        StringBuilder sb = new StringBuilder().append("[");
         int i;
         int startIndex = index >= 0 ? Math.max(0, index - 5) : 0;
         if (startIndex > 0) {
@@ -67,7 +67,7 @@ public class DifferenceValue {
         return sb.append("]").toString();
     }
     private String showByteArrayAsJson(byte[] bytes) {
-        StringBuffer sb = new StringBuffer().append("\"");
+        StringBuilder sb = new StringBuilder().append("\"");
         for (int i = 0; i < bytes.length; i++) {
             sb.append(String.format("%02X", Byte.toUnsignedInt(bytes[i])));
             if (i < bytes.length-1) {
@@ -105,6 +105,13 @@ public class DifferenceValue {
             }
         }
         return obj.toString();
+    }
+    
+    public int getCluster1() {
+        return cluster1;
+    }
+    public int getCluster2() {
+        return cluster2;
     }
     @Override
     public String toString() {

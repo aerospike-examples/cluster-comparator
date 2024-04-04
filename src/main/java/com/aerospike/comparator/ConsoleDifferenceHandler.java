@@ -17,7 +17,7 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
     }
 
     @Override
-    public void handle(int partitionId, Key key, Record side1, Record side2, DifferenceSet differences)
+    public void handle(int partitionId, Key key, Record side1, Record side2, DifferenceCollection differences)
             throws IOException {
         
         if (differences.isQuickCompare()) {
