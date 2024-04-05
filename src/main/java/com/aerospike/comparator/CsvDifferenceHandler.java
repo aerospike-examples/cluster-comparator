@@ -46,6 +46,16 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         return this.FILE_HEADER;
     }
 
+    private String csvify(String s) {
+        if (s == null) {
+            return "";
+        }
+        if (!s.contains("\"")) {
+            return s;
+        }
+        return "\"" + s.replace("\"", "\"\"") + "\"";
+    }
+    
     @Override
     public synchronized void handle(int partitionId, Key key, List<Integer> missingFromClusters) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -90,8 +100,8 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         if (options.isBinsOnly()) {
             RecordDifferences differencesOnRecord = differences.getBinsDifferent(key);
             writeDifference(key, 
-                    differencesOnRecord.toRawString(options),
-                    differencesOnRecord.toHumanString(options));
+                    csvify(differencesOnRecord.toRawString(options)),
+                    csvify(differencesOnRecord.toHumanString(options)));
         }
         else {
             // Do not show the whole binary blob

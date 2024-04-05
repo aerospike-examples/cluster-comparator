@@ -2,5 +2,9 @@
 clusters:
 - hostName: 172.17.0.2:3100
   authMode: INTERNAL
+  clusterName: source
 - hostName: 172.17.0.3:3101
+  clusterName: dest1
 - hostName: 172.17.0.4:3102
+  clusterName: dest2
+  

@@ -967,17 +967,17 @@ public class ClusterComparator {
                     this.options.getSetNames() == null ? "null" : String.join(",", this.options.getSetNames()),
                     this.options.getStartPartition(), this.options.getEndPartition());
             if (options.getBeginDate() != null && options.getEndDate() != null) {
-                System.out.printf("  Looking only for records between %s (%,d) and %s (%d)", 
-                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate(),
-                        options.getDateFormat().format(options.getEndDate()), options.getEndDate());
+                System.out.printf("  Looking only for records between %s (%,d) and %s (%,d)\n", 
+                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate().getTime(),
+                        options.getDateFormat().format(options.getEndDate()), options.getEndDate().getTime());
             }
             else if (options.getBeginDate() != null) {
-                System.out.printf("  Looking only for records after %s (%,d)", 
-                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate());
+                System.out.printf("  Looking only for records after %s (%,d)\n", 
+                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate().getTime());
             }
             else if (options.getEndDate() != null) {
-                System.out.printf("  Looking only for records before %s (%,d)", 
-                        options.getDateFormat().format(options.getBeginDate()), options.getBeginDate());
+                System.out.printf("  Looking only for records before %s (%,d)\n", 
+                        options.getDateFormat().format(options.getBeginDate()), options.getEndDate().getTime());
             }
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());

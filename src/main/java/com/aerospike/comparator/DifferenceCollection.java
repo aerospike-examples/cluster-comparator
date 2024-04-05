@@ -47,7 +47,7 @@ public class DifferenceCollection {
             if (binDiffs == null) {
                 return "";
             }
-            StringBuilder sb = new StringBuilder().append('[');
+            StringBuilder sb = new StringBuilder().append('{');
             boolean first = true;
             for (BinDifferences theseDiffs : binDiffs) {
                 if (!first) {
@@ -56,7 +56,7 @@ public class DifferenceCollection {
                 first = false;
                 sb.append(theseDiffs.toRawString(resolver));
             }
-            return sb.append(']').toString();
+            return sb.append('}').toString();
         }
     }
     
@@ -137,7 +137,7 @@ public class DifferenceCollection {
         }
         
         public String toRawString(ClusterNameResolver resolver) {
-            StringBuilder sb = new StringBuilder().append("{").append('"').append(binName).append("\":{");
+            StringBuilder sb = new StringBuilder().append('"').append(binName).append("\":{");
             boolean hasMissing = false;
             if (this.hasClustersMissingBin()) {
                 sb.append("\"missing\": ");
@@ -158,9 +158,9 @@ public class DifferenceCollection {
                     first = false;
                     getClusterNames(set, sb, resolver);
                 }
-                sb.append("]");
+                sb.append(']');
             }
-            return sb.append("}}").toString();
+            return sb.append('}').toString();
         }
     }
     

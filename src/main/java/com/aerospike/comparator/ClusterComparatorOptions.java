@@ -478,10 +478,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         if (cl.hasOption("endDate")) {
             String value = cl.getOptionValue("endDate");
             if (value.matches("^\\d+$")) {
-                this.beginDate = new Date(Long.parseLong(value));
+                this.endDate = new Date(Long.parseLong(value));
             }
             else {
-                this.beginDate = this.dateFormat.parse(value);
+                this.endDate = this.dateFormat.parse(value);
             }
         }
         String pathOptionsFile = cl.getOptionValue("pathOptionsFile");
@@ -531,7 +531,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         }
         String name = this.getClusterConfigs().get(id).getClusterName();
         if (name != null && !name.isEmpty()) {
-            return name;
+            return "\"" + name + "\"";
         }
         else {
             return Integer.toString(id+1);

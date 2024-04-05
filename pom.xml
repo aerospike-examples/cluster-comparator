@@ -2,9 +2,9 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.aerospike.timf</groupId>
   <artifactId>ClusterComparator</artifactId>
-  <version>1.1.1</version>
+  <version>1.1.2</version>
   <name>Cluster Comparator</name>
-  <description>Find differences between 2 difference Aerospike clusters.</description>
+  <description>Find differences between different Aerospike clusters.</description>
   
 	<properties>
 		<aerospike-client.verion>6.0.0</aerospike-client.verion>
