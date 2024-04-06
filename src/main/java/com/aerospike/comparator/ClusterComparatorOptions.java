@@ -260,10 +260,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         options.addOption("sa1", "useServicesAlternate1", false, "Use services alternative when connecting to cluster 1");
         options.addOption("sa2", "useServicesAlternate2", false, "Use services alternative when connecting to cluster 2");
         options.addOption("db", "beginDate", true, "Specify the begin date of the scan. Any records whose last update time is this time or greater will be included in the scan. The format of the date is "
-                + "by default "+DEFAULT_DATE_FORMAT+" but can be changed with -df flag. If the parameter is a just a number this will be treated as the epoch since 1/1/1970. If the end date "
+                + "by default "+DEFAULT_DATE_FORMAT+" but can be changed with -df flag. If the parameter is a just a number this will be treated as the number of milliseconds since 1/1/1970. If the end date "
                 + "is also specified, only records falling between the 2 dates will be scanned. Default: scan from the start of time.");
         options.addOption("de", "endDate", true, "Specify the end date of the scan. Any records whose last update time is less than or equal to this time will be included in the scan. The format of the date is "
-                + "by default "+DEFAULT_DATE_FORMAT+" but can be changed with -df flag. If the parameter is a just a number this will be treated as the epoch since 1/1/1970. If the start date "
+                + "by default "+DEFAULT_DATE_FORMAT+" but can be changed with -df flag. If the parameter is a just a number this will be treated as the number of milliseconds since 1/1/1970. If the start date "
                 + "is also specified, only records falling between the 2 dates will be scanned. Default: scan until the end of time.");
         options.addOption("df", "dateFormat", true, "Format used to convert the dates passed with the -db and -de flags. Should conform to the spec of SimpleDateFormat.");
         options.addOption("pf", "pathOptionsFile", true, "YAML file used to contain path options. The options are used to determine whether to ignore paths or "
@@ -304,6 +304,29 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         formatter.printHelp(pw, 100, syntax, "options:", options, 0, 2, null);
         System.out.println(sw.toString());
         System.exit(1);
+    }
+    
+    private boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
+    private boolean validatePathOptions() {
+        boolean hasErrors = false;
+        for (PathOption path: this.pathOptions.getPaths()) {
+            if (isBlank(path.getPath())) {
+                if (path.getAction() == null) {
+                    System.out.println("Path configurations has an empty element with no path and no action");
+                }
+                else {
+                    System.out.printf("Empty path configuration against an action of %s\n", path.getAction());
+                }
+                hasErrors = true;
+            }
+            else if (path.getAction() == null) {
+                System.out.printf("Path configuration \"%s\" has an empty element with no path and no action\n", path.getPath());
+                hasErrors = true;
+            }
+        }
+        return !hasErrors;
     }
     
     private void validate(Options options) {
@@ -398,6 +421,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             }
             else if (this.action.needsInputFile && this.inputFileName == null) {
                 System.out.printf("Action %s requires an input file but none was provided.\n", this.action);
+            }
+            else if (this.pathOptions != null && !validatePathOptions()) {
+                System.out.println("Aborting scan due to invalid path options");
             }
             else {
                 valid = !hasErrors;

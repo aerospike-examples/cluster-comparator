@@ -29,7 +29,7 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         }
         this.options = options;
         this.numberOfClusters = options.getClusterConfigs().size();
-        StringBuilder sb = new StringBuilder().append("Namespace,Set,Key,");
+        StringBuilder sb = new StringBuilder().append("Namespace,Set,Partition,Key,");
         if (numberOfClusters != 2) {
             sb.append("Number of Clusters").append(',');
         }
@@ -58,25 +58,17 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
     
     @Override
     public synchronized void handle(int partitionId, Key key, List<Integer> missingFromClusters) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        sb.append(key.namespace).append(',')
-          .append(key.setName).append(',')
-          .append(key.userKey).append(',');
-        if (numberOfClusters != 2) {
-            sb.append(numberOfClusters).append(',');
-        }
-        for (int i=0; i < numberOfClusters; i++) {
-            sb.append(missingFromClusters.contains(i) ? "" : Buffer.bytesToHexString(key.digest)).append(',');
-        }
-        sb.append("Missing from clusters: ").append(missingFromClusters.stream().map(i->options.clusterIdToName(i)).collect(Collectors.toList())).append('\n');
-        writer.print(sb.toString());
-        writer.flush();
+        String missingClusters = missingFromClusters.stream().map(id->options.clusterIdToName(id)).collect(Collectors.toList()).toString();
+        String humanlyReadable = "Missing from clusters: " + missingClusters;
+        String json = "{\"MISSING\":" + missingClusters + "}";
+        writeDifference(partitionId, key, json, humanlyReadable);
     }
 
-    private void writeDifference(Key key, String ...differences) {
+    private void writeDifference(int partitionId, Key key, String ...differences) {
         StringBuilder sb = new StringBuilder();
         sb.append(key.namespace).append(',')
             .append(key.setName).append(',')
+            .append(partitionId).append(',')
             .append(key.userKey).append(',');
         
         if (numberOfClusters != 2) {
@@ -87,11 +79,10 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
             sb.append(digest).append(',');
         }
         for (String s : differences) {
-            sb.append(s).append(',');
+            sb.append(csvify(s)).append(',');
         }
         writer.print(sb.append('\n').toString());
         writer.flush();
-        
     }
     @Override
     public synchronized void handle(int partitionId, Key key, Record side1, Record side2, DifferenceCollection differences)
@@ -99,16 +90,16 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         
         if (options.isBinsOnly()) {
             RecordDifferences differencesOnRecord = differences.getBinsDifferent(key);
-            writeDifference(key, 
-                    csvify(differencesOnRecord.toRawString(options)),
-                    csvify(differencesOnRecord.toHumanString(options)));
+            writeDifference(partitionId, key, 
+                    differencesOnRecord.toRawString(options),
+                    differencesOnRecord.toHumanString(options));
         }
         else {
             // Do not show the whole binary blob
             // We have to manipulate this to make it valid CSV. Any double quotes become
             // double double quote, then put the whole thing in double quotes.
             for (DifferenceSet diffSet : differences.getDifferenceSets()) {
-                writeDifference(key, diffSet.getAsJson(true, this.options).replaceAll("\"", "\"\""));
+                writeDifference(partitionId, key, diffSet.getAsJson(true, this.options).replaceAll("\"", "\"\""));
             }
         }
     }
