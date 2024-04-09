@@ -110,7 +110,7 @@ public class DifferenceCollection {
                     sb.append(',');
                 }
                 first = false;
-                sb.append(resolver.clusterIdToName(i));
+                sb.append(resolver == null ? i : resolver.clusterIdToName(i));
             }
             sb.append(']');
         }
@@ -312,7 +312,7 @@ public class DifferenceCollection {
         return result;
     }
     
-    public RecordDifferences getBinsDifferent(Key key) {
+    public RecordDifferences getBinsDifferent() {
         RecordDifferences result = null;
         Map<String, List<DifferenceValue>> differencesByBin = new HashMap<>();
         for (DifferenceSet thisSet : differenceSets) {
@@ -338,5 +338,10 @@ public class DifferenceCollection {
             }
         }
         return result;
+    }
+    
+    @Override
+    public String toString() {
+        return getBinsDifferent().toHumanString(null);
     }
 }

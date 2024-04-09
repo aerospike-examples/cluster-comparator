@@ -61,10 +61,10 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         String missingClusters = missingFromClusters.stream().map(id->options.clusterIdToName(id)).collect(Collectors.toList()).toString();
         String humanlyReadable = "Missing from clusters: " + missingClusters;
         String json = "{\"MISSING\":" + missingClusters + "}";
-        writeDifference(partitionId, key, json, humanlyReadable);
+        writeDifference(partitionId, key, missingFromClusters, json, humanlyReadable);
     }
 
-    private void writeDifference(int partitionId, Key key, String ...differences) {
+    private void writeDifference(int partitionId, Key key, List<Integer> missingFromClusters, String ...differences) {
         StringBuilder sb = new StringBuilder();
         sb.append(key.namespace).append(',')
             .append(key.setName).append(',')
@@ -76,7 +76,13 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         }
         String digest = Buffer.bytesToHexString(key.digest);
         for (int i = 0; i < numberOfClusters; i++) {
-            sb.append(digest).append(',');
+            if (missingFromClusters == null || !missingFromClusters.contains(i)) {
+                sb.append(digest);
+            }
+            else {
+                sb.append("");
+            }
+            sb.append(',');
         }
         for (String s : differences) {
             sb.append(csvify(s)).append(',');
@@ -89,8 +95,8 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
             throws IOException {
         
         if (options.isBinsOnly()) {
-            RecordDifferences differencesOnRecord = differences.getBinsDifferent(key);
-            writeDifference(partitionId, key, 
+            RecordDifferences differencesOnRecord = differences.getBinsDifferent();
+            writeDifference(partitionId, key, null,
                     differencesOnRecord.toRawString(options),
                     differencesOnRecord.toHumanString(options));
         }
@@ -99,7 +105,7 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
             // We have to manipulate this to make it valid CSV. Any double quotes become
             // double double quote, then put the whole thing in double quotes.
             for (DifferenceSet diffSet : differences.getDifferenceSets()) {
-                writeDifference(partitionId, key, diffSet.getAsJson(true, this.options).replaceAll("\"", "\"\""));
+                writeDifference(partitionId, key, null, diffSet.getAsJson(true, this.options).replaceAll("\"", "\"\""));
             }
         }
     }
@@ -108,5 +114,4 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
     public void close() {
         writer.close();
     }
-
 }
