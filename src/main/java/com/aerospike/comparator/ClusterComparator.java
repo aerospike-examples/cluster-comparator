@@ -977,7 +977,7 @@ public class ClusterComparator {
             }
             else if (options.getEndDate() != null) {
                 System.out.printf("  Looking only for records before %s (%,d)\n", 
-                        options.getDateFormat().format(options.getBeginDate()), options.getEndDate().getTime());
+                        options.getDateFormat().format(options.getEndDate()), options.getEndDate().getTime());
             }
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());
