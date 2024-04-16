@@ -27,6 +27,7 @@ public class RemoteServer {
     public static final int CMD_TOUCH = 2;
     public static final int CMD_EXISTS = 17;
     public static final int CMD_GET = 3;
+    public static final int CMD_GET_METADATA = 18;
     public static final int CMD_QUERY_PARTITION = 4;
     public static final int CMD_INVOKE_INFO_CMD_ON_ALL_NODES = 5;
     public static final int CMD_INVOKE_INFO_CMD_ON_A_NODE = 6;
@@ -364,6 +365,14 @@ public class RemoteServer {
             Key key = RemoteUtils.readKey(dis);
             Record record = client.get(policy, key);
             RemoteUtils.sendRecord(record, dos);
+        }
+        
+        private void doGetMetadata() throws IOException {
+            WritePolicy policy = new WritePolicy();
+            policy = (WritePolicy) RemoteUtils.readPolicy(policy, dis);
+            Key key = RemoteUtils.readKey(dis);
+            RecordMetadata record = client.getMetadata(policy, key);
+            RemoteUtils.sendRecordMetadata(record, dos);
         }
         
         private void doInvokeInfoCmdOnAllNodes() throws IOException {

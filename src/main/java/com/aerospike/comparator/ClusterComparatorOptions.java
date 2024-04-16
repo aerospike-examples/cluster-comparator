@@ -101,6 +101,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     private boolean sortMaps = false;
     private ConfigOptions configOptions = null;
     private boolean binsOnly = false;
+    private boolean showMetadata = false;
+    private int masterCluster = -1;
+    private List<Integer> partitionList = null;
     
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -293,6 +296,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         options.addOption("i", "inputFile", true, "Specify an input file for records to compare. This is only used with the RERUN, READ and TOUCH actions and is "
                 + "typically set to the output file of a previous run.");
         options.addOption(null, "binsOnly", false, "When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the full differences, just the bin names which are different");
+        options.addOption(null, "showMetadata", false, "Output cluster metadata (Last update time, record size) on cluster differernces. This will require an additional read which will impact performance");
+        options.addOption("pl", "partitionList", true, "Specify a list of partitions to scan. If this argument is specified, neither the beginPartition nor the endPartition argument can be specified");
+//        options.addOption(null, "masterCluster", true, "Sets one cluster tobe the master for the sake of comparison. If this flag is set, the date range filter must be specified (beginDate and/or endDate) "
+//                + "and this date range will apply only to the master cluster. ");
         return options;
     }
 
@@ -329,7 +336,18 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         return !hasErrors;
     }
     
-    private void validate(Options options) {
+    private boolean validatePartitionList() {
+        boolean result = true;
+        for (int part : this.partitionList) {
+            if (part < 0 || part >= 4096) {
+                result = false;
+                System.out.printf("Partition list contains invalid partition %d.\n", part);
+            }
+        }
+        return result;
+    }
+    
+    private void validate(Options options, CommandLine cl) {
         boolean valid = false;
         boolean hasErrors = false;
 
@@ -369,7 +387,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             }
         }
 
-        
+        if (this.masterCluster >= 0) {
+            this.showMetadata = true;
+        }
         if (this.isRemoteServer()) {
             if (this.clusters.size() != 1) {
                 System.out.printf("One cluster must be specified on the command line (host1 argument) or in the config file");
@@ -424,6 +444,15 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             }
             else if (this.pathOptions != null && !validatePathOptions()) {
                 System.out.println("Aborting scan due to invalid path options");
+            }
+            else if (this.partitionList != null && cl.hasOption("startPartition")) {
+                System.out.println("Start partition argument cannot be specified if the partitionList argument is specified");
+            }
+            else if (this.partitionList != null && cl.hasOption("endPartition")) {
+                System.out.println("End partition argument cannot be specified if the partitionList argument is specified");
+            }
+            else if (this.partitionList != null && !validatePartitionList()) {
+                System.out.println("Aborting scan due to invalid partition list");
             }
             else {
                 valid = !hasErrors;
@@ -548,7 +577,17 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             this.remoteCacheSize = 0;
         }
         this.binsOnly = cl.hasOption("binsOnly");
-        this.validate(options);
+        this.showMetadata = cl.hasOption("showMetadata");
+        if (cl.hasOption("partitionList")) {
+            this.partitionList = new ArrayList<>();
+            String[] parts = cl.getOptionValue("partitionList").split(",");
+            for (String s : parts) {
+                this.partitionList.add(Integer.parseInt(s));
+            }
+        }
+        
+        this.masterCluster = Integer.parseInt(cl.getOptionValue("masterCluster", "-1"));
+        this.validate(options, cl);
     }
 
     public String clusterIdToName(int id) {
@@ -752,6 +791,35 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     
     public boolean isBinsOnly() {
         return binsOnly;
+    }
+    
+    public boolean isShowMetadata() {
+        return showMetadata;
+    }
+    
+    public int getMasterCluster() {
+        return masterCluster;
+    }
+    
+    public List<Integer> getPartitionList() {
+        return partitionList;
+    }
+    
+    public boolean isDateInRange(long timestamp) {
+        if (this.getBeginDate() == null && this.getEndDate() == null) {
+            // No date range specified
+            return true;
+        }
+        else if (this.getBeginDate() == null && this.getEndDate() != null ) {
+            return timestamp < this.getEndDate().getTime();
+        }
+        else if (this.getBeginDate() != null && this.getEndDate() == null) {
+            return timestamp >= this.getBeginDate().getTime();
+        }
+        else {
+            // Both times specified
+            return timestamp >= this.getBeginDate().getTime() && timestamp < this.getEndDate().getTime(); 
+        }
     }
 }
 

@@ -132,43 +132,48 @@ public class ClusterUtilities {
         for (Node node : nodes) {
             System.out.printf("   Node: %s\n", node.getName());
             Map<Integer, Set<Integer>> replicaToParts = nodeToReplicaToParts.get(node.getName());
-            for (int i = 0; i < replicaToParts.size(); i++) {
-                System.out.printf("      Replica %d: ", i+1);
-                Set<Integer> parts = replicaToParts.get(i);
-                List<Integer> partList = new ArrayList<>(parts);
-                Collections.sort(partList);
-                StringBuilder buffer = new StringBuilder();
-                int lastOutput = -5;
-                int runCount = 0;
-                for (int k = 0; k < partList.size(); k++) {
-                    int thisIndex = partList.get(k);
-                    if (lastOutput+runCount == thisIndex) {
-                        runCount++;
+            if (replicaToParts == null) {
+                System.out.printf("      No allocated partitions. This is unexpected.\n");
+            }
+            else {
+                for (int i = 0; i < replicaToParts.size(); i++) {
+                    System.out.printf("      Replica %d: ", i+1);
+                    Set<Integer> parts = replicaToParts.get(i);
+                    List<Integer> partList = new ArrayList<>(parts);
+                    Collections.sort(partList);
+                    StringBuilder buffer = new StringBuilder();
+                    int lastOutput = -5;
+                    int runCount = 0;
+                    for (int k = 0; k < partList.size(); k++) {
+                        int thisIndex = partList.get(k);
+                        if (lastOutput+runCount == thisIndex) {
+                            runCount++;
+                        }
+                        else {
+                            if (runCount > 1) {
+                                buffer.append("-").append(lastOutput+runCount-1).append(",");
+                            }
+                            else if (lastOutput >= 0) {
+                                buffer.append(",");
+                            }
+                            lastOutput = thisIndex;
+                            runCount = 1;
+                            buffer.append(thisIndex);
+                        }
+                        if (maxLength > 0 && buffer.length() > maxLength ) {
+                            break;
+                        }
+                    }
+                    if (runCount > 1) {
+                        buffer.append("-").append(lastOutput+runCount-1);
+                    }
+                    
+                    if (maxLength > 0 && buffer.length() > maxLength) {
+                        System.out.println(buffer.toString().substring(0, maxLength)+"...");
                     }
                     else {
-                        if (runCount > 1) {
-                            buffer.append("-").append(lastOutput+runCount-1).append(",");
-                        }
-                        else if (lastOutput >= 0) {
-                            buffer.append(",");
-                        }
-                        lastOutput = thisIndex;
-                        runCount = 1;
-                        buffer.append(thisIndex);
+                        System.out.println(buffer.toString());
                     }
-                    if (maxLength > 0 && buffer.length() > maxLength ) {
-                        break;
-                    }
-                }
-                if (runCount > 1) {
-                    buffer.append("-").append(lastOutput+runCount-1);
-                }
-                
-                if (maxLength > 0 && buffer.length() > maxLength) {
-                    System.out.println(buffer.toString().substring(0, maxLength)+"...");
-                }
-                else {
-                    System.out.println(buffer.toString());
                 }
             }
         }

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
@@ -42,6 +43,7 @@ import com.aerospike.comparator.ClusterComparatorOptions.Action;
 import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
 import com.aerospike.comparator.dbaccess.LocalAerospikeClient;
+import com.aerospike.comparator.dbaccess.RecordMetadata;
 import com.aerospike.comparator.dbaccess.RecordSetAccess;
 import com.aerospike.comparator.dbaccess.RemoteAerospikeClient;
 import com.aerospike.comparator.dbaccess.RemoteServer;
@@ -83,7 +85,7 @@ public class ClusterComparator {
         }
         
         @Override
-        public void handle(int partitionId, Key key, List<Integer> missingFromClusters) throws IOException {
+        public void handle(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] recordMetadatas) throws IOException {
             for (int thisCluster : missingFromClusters ) {
                 recordsMissingOnCluster.incrementAndGet(thisCluster);
             }
@@ -92,8 +94,7 @@ public class ClusterComparator {
         }
 
         @Override
-        public void handle(int partitionId, Key key, Record side1, Record side2, DifferenceCollection differences)
-                throws IOException {
+        public void handle(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] recordMetadatas) throws IOException {
             recordsDifferentCount.incrementAndGet();
             checkDifferencesCount();
         }
@@ -289,10 +290,10 @@ public class ClusterComparator {
         return 0;
     }
 
-    private void differentRecords(int partitionId, Key key, DifferenceCollection differences) {
+    private void differentRecords(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] recordMetadatas) {
         for (RecordDifferenceHandler thisHandler : recordDifferenceHandlers) {
             try {
-                thisHandler.handle(partitionId, key, null, null, differences);
+                thisHandler.handle(partitionId, key, differences, recordMetadatas);
             }
             catch (Exception e) {
                 System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
@@ -302,22 +303,59 @@ public class ClusterComparator {
         }
     }
 
-//    private void differentRecords(int partitionId, Key key, Record record1, Record record2, DifferenceSet differences) {
-//        for (RecordDifferenceHandler thisHandler : recordDifferenceHandlers) {
-//            try {
-//                thisHandler.handle(partitionId, key, record1, record2, differences);
-//            }
-//            catch (Exception e) {
-//                System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
-//                e.printStackTrace();
-//                this.forceTerminate = true;
-//            }
-//        }
-//    }
+    private boolean isLutValid(RecordMetadata[] recordMetadatas, int clusterId) {
+        return options.isDateInRange(recordMetadatas[clusterId].getLastUpdateMs());
+    }
+    
+    private boolean filterMissingRecordsByMasterId(RecordMetadata[] recordMetadatas, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord) {
+        if (options.getMasterCluster() >= 0 && recordMetadatas != null) {
+            if (clustersWithoutRecord.contains(options.getMasterCluster())) {
+                // The master cluster has this record, check to see if the LUT is in the specified range.
+                if (isLutValid(recordMetadatas, options.getMasterCluster())) {
+                    // If the other records are out of range then ignore them.
+                    for (Iterator<Integer> it = clustersWithoutRecord.iterator(); it.hasNext();) {
+                        int clusterId = it.next();
+                        if (!isLutValid(recordMetadatas, clusterId)) {
+                            if (options.isDebug()) {
+                                System.out.printf("Master cluster %s has record %s and is valid, cluster %s also has the record but the LUT (%s) is outside the range\n",
+                                        options.clusterIdToName(options.getMasterCluster()),
+                                        options.clusterIdToName(clusterId),
+                                        options.getDateFormat().format(new Date(recordMetadatas[clusterId].getLastUpdateMs())));
+                            }
+                            it.remove();
+                        }
+                    }
+                }
+                else {
+                    // The master record exists but is outside of the range, just ignore.
+                    return false;
+                }
+            }
+            else {
+                //The master is missing. Only flag this as an issue if any other cluster has the record and is valid
+                boolean hasValid = false;
+                for (int clusterId : clustersWithRecord) {
+                    if (isLutValid(recordMetadatas, clusterId)) {
+                        hasValid = true;
+                        break;
+                    }
+                }
+                if (!hasValid) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    
     private void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, int partitionId, Key keyMissing) {
+        RecordMetadata[] recordMetadatas = getMetadata(clients, keyMissing, clustersWithoutRecord, null);
+        if (!filterMissingRecordsByMasterId(recordMetadatas, clustersWithRecord, clustersWithoutRecord)) {
+            return;
+        }
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
             try {
-                thisHandler.handle(partitionId, keyMissing, clustersWithoutRecord);
+                thisHandler.handle(partitionId, keyMissing, clustersWithoutRecord, recordMetadatas);
             }
             catch (Exception e) {
                 System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
@@ -447,8 +485,8 @@ public class ClusterComparator {
                 clustersWithMaxDigest.clear();
                 clustersWithoutRecord.clear();
                 if (options.isDebug()) {
-                    System.out.printf("Next digest: %s, cluster digests:", keyWithLargestDigest);
-                    forEachCluster((i, c)-> System.out.printf(" %d:%s", i, keys[i]));
+                    System.out.printf("Part %d: next digest: %s, cluster digests:", partitionId, keyWithLargestDigest);
+                    forEachCluster((i, c)-> System.out.printf(" %d:%s:%s", i, options.clusterIdToName(i), keys[i]));
                     System.out.println();
                 }
                 for (int i = 0; i < clients.length; i++) {
@@ -531,7 +569,11 @@ public class ClusterComparator {
         }
         
         if (compareResult.hasDifferences()) {
-            differentRecords(partitionId, keys[0], compareResult);
+            RecordMetadata[] recordMetadatas = getMetadata(clients, keys[0], null, clustersToCompare);
+            // TODO: Master cluster logic
+//            if (compareResult.filterByLastUpdateTimes(options, recordMetadatas)) {
+                differentRecords(partitionId, keys[0], compareResult, recordMetadatas);
+//            }
         }
         long totalRecsCompared = totalRecordsCompared.incrementAndGet();
         if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
@@ -579,6 +621,22 @@ public class ClusterComparator {
                 activeThreads.decrementAndGet();
             }
         }
+    }
+    
+    private RecordMetadata[] getMetadata(AerospikeClientAccess[] clients, Key key, List<Integer> clustersToSkip, List<Integer> clustersToInclude) {
+        RecordMetadata[] recordMetadatas = null;
+        if (options.isShowMetadata() || options.getMasterCluster() >= 0) {
+            recordMetadatas = new RecordMetadata[numberOfClusters];
+            for (int i = 0; i < numberOfClusters; i++) {
+                if ((clustersToSkip != null && clustersToSkip.contains(i)) || (clustersToInclude != null && !clustersToInclude.contains(i))) {
+                    recordMetadatas[i] = null;
+                }
+                else {
+                    recordMetadatas[i] = clients[i].getMetadata(null, key);
+                }
+            }
+        }
+        return recordMetadatas;
     }
     
     /**
@@ -651,8 +709,13 @@ public class ClusterComparator {
                                 differenceCollection.add(compareResult);
                             }
                         }
+                        
                         if (differenceCollection.hasDifferences()) {
-                            differentRecords(partId, key, differenceCollection);
+                            RecordMetadata[] recordMetadatas = getMetadata(clients, key, clustersWithoutRecord, null);
+                            // TODO: Master cluster logic
+//                            if (differenceCollection.filterByLastUpdateTimes(options, recordMetadatas)) {
+                                differentRecords(partId, key, differenceCollection, recordMetadatas);
+//                            }
                         }
                         long totalRecsCompared = totalRecordsCompared.incrementAndGet();
                         if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
@@ -704,7 +767,12 @@ public class ClusterComparator {
             runner = new FixedRecordsCompareRunner(clients, new FileLoadingProcessor());
         }
         else {
-            this.partitionList = IntStream.range(startPartition, endPartition).boxed().collect(Collectors.toList());
+            if (options.getPartitionList() != null) {
+                this.partitionList = options.getPartitionList();
+            }
+            else {
+                this.partitionList = IntStream.range(startPartition, endPartition).boxed().collect(Collectors.toList());
+            }
             runner = new PartitionCompareRunner(clients, namespace, setName);
         }
         

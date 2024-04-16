@@ -90,4 +90,10 @@ public class LocalAerospikeClient implements AerospikeClientAccess {
     public boolean isLocal() {
         return true;
     }
+
+    @Override
+    public RecordMetadata getMetadata(WritePolicy policy, Key key) {
+        Record record = this.client.operate(policy, key, RecordMetadata.getMetadataOperations());
+        return record == null ? null : new RecordMetadata(record);
+    }
 }

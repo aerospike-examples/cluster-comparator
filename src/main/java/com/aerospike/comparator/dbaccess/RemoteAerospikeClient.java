@@ -242,4 +242,24 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
         return false;
     }
 
+    @Override
+    public RecordMetadata getMetadata(WritePolicy policy, Key key) {
+        Connection conn = null;
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_GET_METADATA);
+            RemoteUtils.sendPolicy(policy, conn.getDos());
+            RemoteUtils.sendKey(key, conn.getDos());
+            return RemoteUtils.readRecordMetadata(conn.getDis());
+        }
+        catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
+        }
+    }
 }

@@ -150,7 +150,7 @@ public class MetadataComparator {
     }
     
     public DifferenceSet compareMetaData(AerospikeClientAccess[] clients) {
-        DifferenceSet differenceSet = new DifferenceSet(new Key("config", "", ""), false, options.getPathOptions());
+        DifferenceSet differenceSet = new DifferenceSet(new Key("config", "", ""), false, options.getPathOptions(), -1, -1);
         differenceSet.pushPath("/config");
         for (int i = 0; i < clients.length; i++) {
             for (int j = i+1; j < clients.length; j++) {

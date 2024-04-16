@@ -3,8 +3,8 @@ package com.aerospike.comparator;
 import java.io.IOException;
 
 import com.aerospike.client.Key;
-import com.aerospike.client.Record;
+import com.aerospike.comparator.dbaccess.RecordMetadata;
 
 public interface RecordDifferenceHandler {
-    void handle(int partitionId, Key key, Record side1, Record side2, DifferenceCollection differences) throws IOException;
+    void handle(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] recordMetadatas) throws IOException;
 }

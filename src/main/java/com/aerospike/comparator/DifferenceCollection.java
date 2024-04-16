@@ -11,6 +11,7 @@ import java.util.Set;
 
 import com.aerospike.client.Key;
 import com.aerospike.comparator.RecordComparator.DifferenceType;
+import com.aerospike.comparator.dbaccess.RecordMetadata;
 
 public class DifferenceCollection {
     private List<DifferenceSet> differenceSets = null;
@@ -339,6 +340,38 @@ public class DifferenceCollection {
         }
         return result;
     }
+    
+    // TODO: Master cluster logic
+    /**
+     * When a master cluster has been specified, we only want differences when the master cluster is part of the comparison
+     * and the master cluster last update time is valid and the non-master cluster is also valid.
+     * @param options
+     * @param recordMetadatas
+     * @return true if there are still comparisons to be made, false otherwise.
+     */
+//    public boolean filterByLastUpdateTimes(ClusterComparatorOptions options, RecordMetadata[] recordMetadatas) {
+//        if (recordMetadatas == null || options.getMasterCluster() < 0) {
+//            return true;
+//        }
+//        for (Iterator<DifferenceSet> it = differenceSets.iterator(); it.hasNext();) {
+//            DifferenceSet thisSet = it.next();
+//            int cluster1 = thisSet.getCluster1Index();
+//            int cluster2 = thisSet.getCluster2Index();
+//            if (cluster1 >= 0 && cluster2 >= 0) {
+//                if (cluster1 != options.getMasterCluster() && cluster2 != options.getMasterCluster()) {
+//                    // Neither is master, remove this difference
+//                    it.remove();
+//                }
+//                else if (!(options.isDateInRange(recordMetadatas[cluster1].getLastUpdateMs()) && 
+//                        options.isDateInRange(recordMetadatas[cluster2].getLastUpdateMs()))) {
+//                    
+//                    // To validly compare, need both the master and the other cluster in range, this is not the case here.
+//                    it.remove();
+//                }
+//            }
+//        }
+//        return hasDifferences();
+//    }
     
     @Override
     public String toString() {

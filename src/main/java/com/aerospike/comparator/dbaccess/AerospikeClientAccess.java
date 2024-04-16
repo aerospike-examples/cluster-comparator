@@ -17,6 +17,7 @@ public interface AerospikeClientAccess {
     void touch(WritePolicy policy, Key key);
     boolean exists(WritePolicy policy, Key key);
     Record get(Policy policy, Key key);
+    RecordMetadata getMetadata(WritePolicy policy, Key key);
     RecordSetAccess queryPartitions(QueryPolicy queryPolicy, Statement statement, PartitionFilter filter);
     
     Map<String, String> invokeInfoCommandOnAllNodes(String info);

@@ -200,7 +200,7 @@ public class RecordComparator {
         Map<?, ?> map1 = (Map<?, ?>)record1.bins;
         Map<?, ?> map2 = record2.bins;
 
-        DifferenceSet result = new DifferenceSet(key, stopAtFirstDifference, pathOptions);
+        DifferenceSet result = new DifferenceSet(key, stopAtFirstDifference, pathOptions, cluster1index, cluster2index);
         result.pushPath(key.namespace);
         result.pushPath(key.setName);
         compare(map1, map2, result, cluster1index, cluster2index);
@@ -209,7 +209,7 @@ public class RecordComparator {
         return result;
     }
     public DifferenceSet compare(Key key, byte[] record1hash, byte[] record2hash, PathOptions pathOptions, int cluster1index, int cluster2index) {
-        DifferenceSet result = new DifferenceSet(key, true, pathOptions);
+        DifferenceSet result = new DifferenceSet(key, true, pathOptions, cluster1index, cluster2index);
         result.pushPath(key.namespace);
         result.pushPath(key.setName);
         compare(record1hash, record2hash, "", result, cluster1index, cluster2index);

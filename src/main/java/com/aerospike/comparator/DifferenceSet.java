@@ -17,15 +17,19 @@ public class DifferenceSet {
     private final Key key;
     private final boolean quickCompare;
     private final PathOptions pathOptions;
+    private final int cluster1Index;
+    private final int cluster2Index;
     
     public DifferenceSet() {
-        this(null, false, null);
+        this(null, false, null, -1, -1);
     }
     
-    public DifferenceSet(Key key, boolean quickCompare, PathOptions pathOptions) {
+    public DifferenceSet(Key key, boolean quickCompare, PathOptions pathOptions, int cluster1Index, int cluster2Index) {
         this.key = key;
         this.quickCompare = quickCompare;
         this.pathOptions = pathOptions;
+        this.cluster1Index = cluster1Index;
+        this.cluster2Index = cluster2Index;
     }
     
     public EnumSet<PathAction> getOptionsForCurrentPath() {
@@ -123,5 +127,13 @@ public class DifferenceSet {
 
     public String getSetName() {
         return key == null ? null : key.setName; 
+    }
+    
+    public int getCluster1Index() {
+        return cluster1Index;
+    }
+    
+    public int getCluster2Index() {
+        return cluster2Index;
     }
 }

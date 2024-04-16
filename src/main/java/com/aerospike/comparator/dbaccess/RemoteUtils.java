@@ -161,6 +161,42 @@ public class RemoteUtils {
         }
     }
     
+    public static void sendRecordMetadata(RecordMetadata record, DataOutputStream dos) throws IOException{
+        if (record == null) {
+            dos.writeBoolean(false);
+        }
+        else {
+            dos.writeBoolean(true);
+            try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+                oos.writeObject(record);
+                bos.flush();
+                byte[] bytes = bos.toByteArray();
+                dos.writeInt(bytes.length);
+                dos.write(bytes);
+            }
+        }
+    }
+    
+    public static RecordMetadata readRecordMetadata(DataInputStream dis) throws IOException {
+        boolean exists = dis.readBoolean();
+        if (exists) {
+            int length = dis.readInt();
+            byte[] bytes = dis.readNBytes(length);
+            try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
+                    ObjectInputStream ois = new ObjectInputStream(bis)) {
+                RecordMetadata result = (RecordMetadata) ois.readObject();
+                return result;
+            }
+            catch (ClassNotFoundException cnfe) {
+                throw new AerospikeException(cnfe);
+            }
+        }
+        else {
+            return null;
+        }
+    }
+    
     public static void sendRecordHash(Record record, DataOutputStream dos, boolean sortMaps) throws IOException{
         if (record == null) {
             dos.writeBoolean(false);

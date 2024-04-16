@@ -7,17 +7,37 @@ import java.util.stream.Collectors;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.command.Buffer;
+import com.aerospike.comparator.dbaccess.RecordMetadata;
 
 public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDifferenceHandler {
     
     @Override
-    public void handle(int partitionId, Key key, List<Integer> missingFromClusters) throws IOException {
-        System.out.printf("MISSING RECORD:(%s,%s,%s,%s) Missing from clusters %s\n",key.namespace,key.setName, key.userKey, Buffer.bytesToHexString(key.digest), 
-                missingFromClusters.stream().map(i->i+1).collect(Collectors.toList()));
+    public void handle(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] recordMetadatas) throws IOException {
+        String recordMetadataDesc = "";
+        if (recordMetadatas != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(" LUTS: ");
+            for (int i = 0; i < recordMetadatas.length; i++) {
+                RecordMetadata metadata = recordMetadatas[i];
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(i).append("->");
+                if (metadata == null) {
+                    sb.append("null");
+                }
+                else {
+                    sb.append(metadata.getLastUpdateMs());
+                }
+            }
+            recordMetadataDesc = sb.toString();
+        }
+        System.out.printf("MISSING RECORD:(%s,%s,%s,%s) Missing from clusters %s%s\n",key.namespace,key.setName, key.userKey, Buffer.bytesToHexString(key.digest), 
+                missingFromClusters.stream().map(i->i+1).collect(Collectors.toList()), recordMetadataDesc);
     }
 
     @Override
-    public void handle(int partitionId, Key key, Record side1, Record side2, DifferenceCollection differences)
+    public void handle(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] recordMetadatas)
             throws IOException {
         
         if (differences.isQuickCompare()) {
