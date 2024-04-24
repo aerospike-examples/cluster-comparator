@@ -39,7 +39,6 @@ Note that this method is designed for use where the visibility of the clusters i
 ```
 usage: com.aerospike.comparator.ClusterComparator [<options>]
 options:
-options:
 -a,--action <arg>                Action to take. Options are: 'scan' (scan for differences), 'touch'
                                  (touch the records specified in the file), 'read' (read the records
                                  in specified file), , 'scan_touch' (scan for differences, if any
@@ -53,6 +52,8 @@ options:
                                  (Default: scan)
 -a1,--authMode1 <arg>            Set the auth mode of cluster1. Default: INTERNAL
 -a2,--authMode2 <arg>            Set the auth mode of cluster2. Default: INTERNAL
+   --binsOnly                    When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the
+                                 full differences, just the bin names which are different
 -C,--compareMode <arg>           Determine which sort of comparison to use. The options are:
                                  QUICK_NAMESPACE - Perform a quick (partition by partition count)
                                  comparison of an entire namespace. Cannot be used if migrations are
@@ -86,16 +87,16 @@ options:
                                  time is this time or greater will be included in the scan. The
                                  format of the date is by default yyyy/MM/dd-hh:mm:ssZ but can be
                                  changed with -df flag. If the parameter is a just a number this
-                                 will be treated as the epoch since 1/1/1970. If the end date is
-                                 also specified, only records falling between the 2 dates will be
-                                 scanned. Default: scan from the start of time.
+                                 will be treated as the number of milliseconds since 1/1/1970. If
+                                 the end date is also specified, only records falling between the 2
+                                 dates will be scanned. Default: scan from the start of time.
 -de,--endDate <arg>              Specify the end date of the scan. Any records whose last update
                                  time is less than or equal to this time will be included in the
                                  scan. The format of the date is by default yyyy/MM/dd-hh:mm:ssZ but
                                  can be changed with -df flag. If the parameter is a just a number
-                                 this will be treated as the epoch since 1/1/1970. If the start date
-                                 is also specified, only records falling between the 2 dates will be
-                                 scanned. Default: scan until the end of time.
+                                 this will be treated as the number of milliseconds since 1/1/1970.
+                                 If the start date is also specified, only records falling between
+                                 the 2 dates will be scanned. Default: scan until the end of time.
 -df,--dateFormat <arg>           Format used to convert the dates passed with the -db and -de flags.
                                  Should conform to the spec of SimpleDateFormat.
 -E,--endPartition <arg>          Partition to end the comparison at. The comparsion will not include
@@ -136,6 +137,9 @@ options:
 -pf,--pathOptionsFile <arg>      YAML file used to contain path options. The options are used to
                                  determine whether to ignore paths or compare list paths order
                                  insensitive.
+-pl,--partitionList <arg>        Specify a list of partitions to scan. If this argument is
+                                 specified, neither the beginPartition nor the endPartition argument
+                                 can be specified
 -q,--quiet                       Do not output spurious information like progress.
 -r,--rps <arg>                   Limit requests per second on the cluster to this value. Use 0 for
                                  unlimited. (Default: 0)
@@ -170,6 +174,9 @@ options:
                                  a comma-separated list. If not specified, all sets will be scanned.
 -sa1,--useServicesAlternate1     Use services alternative when connecting to cluster 1
 -sa2,--useServicesAlternate2     Use services alternative when connecting to cluster 2
+   --showMetadata                Output cluster metadata (Last update time, record size) on cluster
+                                 differernces. This will require an additional read which will
+                                 impact performance
 -sm,--sortMaps <arg>             Sort maps. If using hashes to compare a local cluster with a remote
                                  cluster and the order in the maps is different, the hashes will be
                                  different. This can lead to false positives, especially when using
@@ -219,7 +226,7 @@ The most significant options are:
 * -h1, h2: Specify the clusters to connect to
 * -n: The namespace(s) to compare, a comma separated list
 * -s: The sets to compare, if desired. This is an optional comma separated list
-* -C: The compare mode to use. This can be quick (comparing record counts on a per-partition basis and only compare those that are different) all the way throught to a complete records level comparison)
+* -C: The compare mode to use. This can be quick (comparing record counts on a per-partition basis and only compare those that are different) all the way through to a complete records level comparison)
 * -a: The action to take. Should the records be scanned, or scanned and then touched if they're missing for example
 * -t: The number of threads. 
 
@@ -244,7 +251,7 @@ paths:
 ```
 
 ## Comparing more than 2 clusters
-The comparator has the ability to compare an arbitrary number of clusters. In order to do this, the cluster connection options must be specified in a config YAML file and *cannot* be specified on the command line. This is separate from the path YAML file above. This file is specified with “--configFile” or “-cf” option. At the moment this config file can only take the cluster connection details, but in future it will be able to take all options. 
+The comparator has the ability to compare an arbitrary number of clusters. In order to do this, the cluster connection options must be specified in a config YAML file and *cannot* be specified on the command line. This is separate from the path YAML file above. This file is specified with `--configFile` or `-cf` option. At the moment this config file can only take the cluster connection details and namespace mapping details, but in future it will be able to take all options. 
 
 So a simple example might be:
 
@@ -261,7 +268,7 @@ This gives details of 3 clusters to connect, however 2 or more clusters can be c
 
 This is a simple example, but you can specify any options you want. For example to use `tls`:
 
-```
+```yaml
 ---
 clusters:
 - hostName: 172.24.162.8:tlsName:4333
@@ -297,8 +304,58 @@ Each host can take the following parameters:
 `caCertChain`
 `keyPassword`
 
+If a configuration file is provided with host connectivity details, the connection command line options like `--hosts1`, `--hosts2`, `--authMode1`, `--user1`, `--password1`, `--tls1`, `--clusterName1`, `--useServicesAlternate1` and so on cannot be specified.
+
+## Comparing different namespaces
+Sometimes it is desired to compare records in different namespaces in different clusters. For example, there may be a `stage` namespace on a staging cluster and a `prod` namespace on a production cluster, but the two should have the same data. This can be achieved using the `namespaceMapping` section of the configuration file. (`--configFile` option).
+
+This part of the config file looks like:
+
+```yaml
+namespaceMapping:
+- namespace: test
+  mappings:
+  - clusterName: dest1
+    name: bar
+```
+
+In this case when the namespace `test` is being compared between clusters, all clusters will use the `test` namespace except for the cluster with the name `dest1`, where the records will be compared to the `bar` namespace. When this option is used, the comparator will print lines at the start of the comparison similar to:
+
+```
+  Namespace "test" is known as "bar" on cluster "dest1"
+```
+
+(Note that these lines will not be printed if the `--silent` option has been specified, or if a namespace has been mapped to the same name. For example, mapping namespace `test` to a name of `test`.)
+
+In the above example, the `clusterName` parameter was passed to determine which namespace was being referenced. However, it is equally valid to pass the index of the cluster, starting with index 1 through the `clusterIndex` parameter. Note that if both `clusterName` and `clusterIndex` are specified and they do not refer to the same cluster, an error will be printed and the comparison aborted.
+
+An example including both cluster connection details and namespace mapping in the config file is:
+
+```yaml
+---
+clusters:
+- hostName: 172.17.0.2:3100
+  authMode: INTERNAL
+  clusterName: test
+- hostName: 172.17.0.3:3101
+  clusterName: stage
+- hostName: 172.17.0.4:3102
+  clusterName: prod
+namespaceMapping:
+- namespace: customer
+  mappings:
+  - clusterName: test
+    name: testCust
+  - clusterName: stage
+    name: stageCust
+  - clusterName: prod
+    name: prodCust
+```
+
+It is recommended to use cluster names wherever possible for ease of understanding and ensuring the correct cluster is connected to. For information on cluster names, please see [cluster-name](https://aerospike.com/docs/server/reference/configuration/?context=all&version=7&search=cluster-name#service__cluster-name) in the Aerospike Reference documentation.
+
 ## Implementation
-This comparator uses the `scanPartitions` method to go through all 4,096 partitions in a cluster and scan them. `scanPartitions` is very useful as it returns the digests for a particular partition in digest order. If we consider comparing a single partition, we have a connection to each one of the 2 clusters and we know that the same record (digest) will always appear in the same parition on both clusters. Since the digests are returned in sorted order, we effectively have 2 very large sorted lists of items we need to compare. 
+This comparator uses the `scanPartitions` method to go through all 4,096 partitions in a cluster and scan them. `scanPartitions` is very useful as it returns the digests for a particular partition in digest order. If we consider comparing a single partition, we have a connection to each one of the 2 clusters and we know that the same record (digest) will always appear in the same partition on both clusters. Since the digests are returned in sorted order, we effectively have 2 very large sorted lists of items we need to compare. 
 
 The internals of the comparison are therefore very easy. This is in the `comparePartition` method whose code resembles:
 

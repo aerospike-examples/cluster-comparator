@@ -10,6 +10,10 @@ import com.aerospike.client.command.Buffer;
 import com.aerospike.comparator.dbaccess.RecordMetadata;
 
 public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDifferenceHandler {
+    private final ClusterNameResolver resolver;
+    public ConsoleDifferenceHandler(ClusterNameResolver resolver) {
+        this.resolver = resolver;
+    }
     
     @Override
     public void handle(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] recordMetadatas) throws IOException {
@@ -22,7 +26,7 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
                 if (i > 0) {
                     sb.append(',');
                 }
-                sb.append(i).append("->");
+                sb.append(resolver.clusterIdToName(i)).append("->");
                 if (metadata == null) {
                     sb.append("null");
                 }

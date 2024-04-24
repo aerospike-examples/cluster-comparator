@@ -117,7 +117,7 @@ public class ClusterComparator {
         this.missingRecordHandlers.add(handler);
         this.recordDifferenceHandlers.add(handler);
         if (options.isConsole()) {
-            ConsoleDifferenceHandler consoleHandler = new ConsoleDifferenceHandler();
+            ConsoleDifferenceHandler consoleHandler = new ConsoleDifferenceHandler(this.options);
             this.missingRecordHandlers.add(consoleHandler);
             this.recordDifferenceHandlers.add(consoleHandler);
         }
@@ -247,20 +247,22 @@ public class ClusterComparator {
         PartitionMap[] partitionMaps = new PartitionMap[clients.length];
         Set<Integer> partitionsDifferent = new HashSet<>();
         forEachCluster((i, c) -> {
+            String thisNamespace = options.getNamespaceName(namespace, i);
             PartitionMap partitionMap = new PartitionMap(clients[i]);
-            if (!partitionMap.isComplete(namespace)) {
-                throw new QuickCompareException("Not all partitions are available for namespace '" + namespace + "' on cluster 1, quick compare is not available.");
+            if (!partitionMap.isComplete(thisNamespace)) {
+                throw new QuickCompareException("Not all partitions are available for namespace '" + thisNamespace + "' on cluster 1, quick compare is not available.");
             }
-            if (partitionMap.isMigrationsHappening(namespace)) {
-                throw new QuickCompareException("Migrations are happening for namespace '" + namespace + "' on cluster 1, quick compare is not available.");
+            if (partitionMap.isMigrationsHappening(thisNamespace)) {
+                throw new QuickCompareException("Migrations are happening for namespace '" + thisNamespace + "' on cluster 1, quick compare is not available.");
             }
             partitionMaps[i] = partitionMap;
         });
         if (!options.isSilent()) {
             System.out.printf("Quick record counts:\n");
             forEachCluster((i, c) -> {
+                String thisNamespace = options.getNamespaceName(namespace, i);
                 System.out.printf("\tcluster %d: (%d records, %d tombstones)\n",
-                    i, partitionMaps[i].getRecordCount(namespace), partitionMaps[i].getTombstoneCount(namespace));
+                    i, partitionMaps[i].getRecordCount(thisNamespace), partitionMaps[i].getTombstoneCount(thisNamespace));
             });
         }
         for (int i = 0; i < clients.length; i++) {
@@ -442,29 +444,32 @@ public class ClusterComparator {
         queryPolicy.shortQuery = false;
         queryPolicy.filterExp = this.filterExpresion;
         
-        Statement statement = new Statement();
-        statement.setNamespace(namespace);
-        statement.setSetName(setName);
-
-        int rpsThisThread = options.getRps()/this.threadsToUse;
-        if (options.getRps() > 0 && rpsThisThread == 0) {
+        int rps = options.getRps()/this.threadsToUse;
+        if (options.getRps() > 0 && rps == 0) {
             // Eg 10 threads, 5 rps would give 0
-            rpsThisThread = 1;
+            rps = 1;
         }
-        statement.setRecordsPerSecond(rpsThisThread);
-        
+        final int rpsThisThread = rps;
+
+        Statement[] statements = new Statement[numberOfClusters];
         PartitionFilter[] filters = new PartitionFilter[clients.length];
-        for (int i = 0; i < clients.length; i++) {
+        forEachCluster((i, c) -> {
+            String namespaceName = options.getNamespaceName(namespace, i);
+            Statement statement = new Statement();
+            statement.setNamespace(namespaceName);
+            statement.setSetName(setName);
+            statement.setRecordsPerSecond(rpsThisThread);
+            statements[i] = statement;
             filters[i] = PartitionFilter.id(partitionId);
-        }
-        
+        });
+
         if (options.isDebug()) {
             System.out.printf("Thread %d starting comparison of namespace %s, partition %d\n", Thread.currentThread().getId(), namespace, partitionId);
         }
         RecordSetAccess[] recordSets = new RecordSetAccess[clients.length];
         boolean[] sidesValid = new boolean[clients.length];
         for (int i = 0; i < clients.length; i++) {
-            recordSets[i] = clients[i].queryPartitions(queryPolicy, statement, filters[i]);
+            recordSets[i] = clients[i].queryPartitions(queryPolicy, statements[i], filters[i]);
             sidesValid[i] = getNextRecord(recordSets[i], i);
         }
         
@@ -553,6 +558,14 @@ public class ClusterComparator {
         differenceCollection.add(compareResult);
     }
     
+    private Key getFirstNonNull(Key[] keys) {
+        for (Key key : keys) {
+            if (key != null) {
+                return key;
+            }
+        }
+        return null;
+    }
     private DifferenceCollection compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys) {
         DifferenceCollection compareResult = new DifferenceCollection(clustersToCompare);
         for (int i = 0; i < clustersToCompare.size(); i++) {
@@ -569,10 +582,10 @@ public class ClusterComparator {
         }
         
         if (compareResult.hasDifferences()) {
-            RecordMetadata[] recordMetadatas = getMetadata(clients, keys[0], null, clustersToCompare);
+            RecordMetadata[] recordMetadatas = getMetadata(clients, getFirstNonNull(keys), null, clustersToCompare);
             // TODO: Master cluster logic
 //            if (compareResult.filterByLastUpdateTimes(options, recordMetadatas)) {
-                differentRecords(partitionId, keys[0], compareResult, recordMetadatas);
+                differentRecords(partitionId, getFirstNonNull(keys), compareResult, recordMetadatas);
 //            }
         }
         long totalRecsCompared = totalRecordsCompared.incrementAndGet();
@@ -855,7 +868,7 @@ public class ClusterComparator {
                     System.out.printf("%,dms: [buffer lines: %d%s], active threads: %d, records processed: {", 
                             (now-startTime), remaining, remaining == FileLoadingProcessor.MAX_QUEUE_DEPTH ? "+" : "", activeThreads);
                 }
-                forEachCluster((i, c) -> System.out.printf("%scluster%d: %,d", i > 0 ? ", ": "" ,i, currentRecordsForCluster[i]));
+                forEachCluster((i, c) -> System.out.printf("%s%s: %,d", i > 0 ? ", ": "" , options.clusterIdToName(i), currentRecordsForCluster[i]));
                 System.out.printf("} throughput: {last second: %,d rps, overall: %,d rps}\n", 
                         recordsThisSecond/numberOfClusters,
                         (totalCurrentRecords)*1000/2/elapsedMilliseconds);
@@ -1021,14 +1034,7 @@ public class ClusterComparator {
         }
     }
     
-    public DifferenceSummary begin() throws Exception {
-        if (!options.isSilent()) {
-            System.out.printf("=== Aerospike Cluster Comparator v%s ===\n", this.getClass().getPackage().getImplementationVersion());
-        }
-        if (options.isRemoteServer()) {
-            startRemoteServer();
-            return null;
-        }
+    public void printExecutionParameters() {
         if (!options.isSilent()) {
             System.out.printf("Beginning scan with namespaces '%s', sets '%s', start partition: %d, end partition %d\n", 
                     String.join(",", this.options.getNamespaces()),
@@ -1047,9 +1053,39 @@ public class ClusterComparator {
                 System.out.printf("  Looking only for records before %s (%,d)\n", 
                         options.getDateFormat().format(options.getEndDate()), options.getEndDate().getTime());
             }
+            for (String namespace : this.options.getNamespaces()) {
+                if (this.options.isNamespaceNameOverridden(namespace)) {
+                    System.out.printf("  Namespace \"%s\" is known as", namespace);
+                    boolean firstDifference = true;
+                    for (int i = 0; i < numberOfClusters; i++) {
+                        String thisClusterName = options.clusterIdToName(i);
+                        String thisNamespace = options.getNamespaceName(namespace, i);
+                        if (!thisNamespace.equals(namespace)) {
+                            if (!firstDifference) {
+                                System.out.print(", ");
+                            }
+                            firstDifference = false;
+                            System.out.printf(" \"%s\" on cluster %s", thisNamespace, thisClusterName);
+                        }
+                    }
+                    System.out.println();
+                }
+            }
+
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());
         }
+    }
+    
+    public DifferenceSummary begin() throws Exception {
+        if (!options.isSilent()) {
+            System.out.printf("=== Aerospike Cluster Comparator v%s ===\n", this.getClass().getPackage().getImplementationVersion());
+        }
+        if (options.isRemoteServer()) {
+            startRemoteServer();
+            return null;
+        }
+        this.printExecutionParameters();
         this.threadsToUse = options.getThreads() <= 0 ? Runtime.getRuntime().availableProcessors() : options.getThreads();
         AerospikeClientAccess[] clients = new AerospikeClientAccess[numberOfClusters];
         forEachCluster((i, c) -> clients[i] = this.connectClient(i, c));

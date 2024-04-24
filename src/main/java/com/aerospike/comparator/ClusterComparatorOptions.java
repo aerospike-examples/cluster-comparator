@@ -298,7 +298,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         options.addOption(null, "binsOnly", false, "When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the full differences, just the bin names which are different");
         options.addOption(null, "showMetadata", false, "Output cluster metadata (Last update time, record size) on cluster differernces. This will require an additional read which will impact performance");
         options.addOption("pl", "partitionList", true, "Specify a list of partitions to scan. If this argument is specified, neither the beginPartition nor the endPartition argument can be specified");
-//        options.addOption(null, "masterCluster", true, "Sets one cluster tobe the master for the sake of comparison. If this flag is set, the date range filter must be specified (beginDate and/or endDate) "
+//        options.addOption(null, "masterCluster", true, "Sets one cluster to be the master for the sake of comparison. If this flag is set, the date range filter must be specified (beginDate and/or endDate) "
 //                + "and this date range will apply only to the master cluster. ");
         return options;
     }
@@ -350,9 +350,11 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     private void validate(Options options, CommandLine cl) {
         boolean valid = false;
         boolean hasErrors = false;
-
+        String configError = null;
+        
         if (this.configOptions != null) {
             this.clusters = this.configOptions.getClusters();
+            configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
         }
         if (this.clusters == null) {
             this.clusters = new ArrayList<>();
@@ -400,7 +402,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             }
         }
         else {
-            if (this.threads < 0) {
+            if (configError != null) {
+                System.out.println(configError);
+            }
+            else if (this.threads < 0) {
                 System.out.println("threads must be >= 0, not " + this.threads);
             }
             else if (this.startPartition < 0 || this.startPartition >= 4096) {
@@ -543,7 +548,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         if (pathOptionsFile != null) {
             ObjectMapper mapper = YAMLMapper.builder().enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS).build();
             mapper.findAndRegisterModules();
-            this.pathOptions = mapper.readValue(new File (pathOptionsFile), PathOptions.class);
+            this.pathOptions = mapper.readValue(new File(pathOptionsFile), PathOptions.class);
         }
         this.recordCompareLimit = Long.valueOf(cl.getOptionValue("recordLimit", "0"));
         if (cl.hasOption("metadataCompare")) {
@@ -590,8 +595,27 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         this.validate(options, cl);
     }
 
+    public String getNamespaceName(String name, int clusterOrdinal) {
+        if (this.configOptions == null) {
+            return name;
+        }
+        else {
+            return this.configOptions.getNamespace(name, clusterOrdinal);
+        }
+    }
+    
+    public boolean isNamespaceNameOverridden(String name) {
+        if (this.configOptions == null) {
+            return false;
+        }
+        return this.configOptions.isNamespaceNameOverridden(name);
+    }
+    
+    public boolean isClusterIdValid(int id) {
+        return (id >= 0 && id < this.getClusterConfigs().size());
+    }
     public String clusterIdToName(int id) {
-        if (id < 0 || id >= this.getClusterConfigs().size()) {
+        if (!isClusterIdValid(id)) {
             throw new IllegalArgumentException(String.format("cluster id must be in the range of 0 to %d, not %d", this.getClusterConfigs().size()-1, id));
         }
         String name = this.getClusterConfigs().get(id).getClusterName();
@@ -601,6 +625,21 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         else {
             return Integer.toString(id+1);
         }
+    }
+    
+    /**
+     * Return the 0-based index of the cluster with the passed name. If the cluster name does not exist, -1 is returned.
+     */
+    public int clusterNameToId(String name) {
+        if (name == null) {
+            throw new NullPointerException("name must not be null");
+        }
+        for (int i = 0; i < this.getClusterConfigs().size(); i++) {
+            if (name.equals(this.getClusterConfigs().get(i).getClusterName())) {
+                return i;
+            }
+        }
+        return -1;
     }
     
     public boolean isSilent() {

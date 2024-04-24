@@ -7,4 +7,10 @@ clusters:
   clusterName: dest1
 - hostName: 172.17.0.4:3102
   clusterName: dest2
-  
+namespaceMapping:
+- namespace: test
+  mappings:
+  - clusterName: dest1
+    name: test
+  - clusterIndex: 1
+    name: bar
