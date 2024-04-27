@@ -119,7 +119,7 @@ public class DifferenceCollection {
         public String toHumanString(ClusterNameResolver resolver) {
             StringBuilder sb = new StringBuilder().append("Bin \"").append(binName).append("\"");
             if (this.hasClustersMissingBin()) {
-                sb.append("is missing on clusters ");
+                sb.append(" is missing on clusters ");
                 getClusterNames(this.getClustersMissing(), sb, resolver);
             }
             if (this.hasDifferentValues()) {
@@ -212,6 +212,16 @@ public class DifferenceCollection {
         else {
             return path.substring(index, endIndex);
         }
+    }
+    
+    /**
+     * returns <pre>true</pre> if the path contains a path that goes into a bin, such as 
+     * a map key within a bin.
+     * @param path
+     * @return
+     */
+    private boolean getIsBinSubPart(String path) {
+        return path.split("/").length > 3;
     }
     
     private void addSameValues(Set<Set<Integer>> clustersWithSameValues, int same1, int same2) {
@@ -320,11 +330,17 @@ public class DifferenceCollection {
             Map<String, DifferenceValue> differences = thisSet.getDifferences();
             for (String path : differences.keySet()) {
                 String binName = getBinFromPath(path);
+                boolean isSubPartOfBin = getIsBinSubPart(path);
                 DifferenceValue diffValue = differences.get(path);
                 List<DifferenceValue> diffsForThisBin = differencesByBin.get(binName);
                 if (diffsForThisBin == null) {
                     diffsForThisBin = new ArrayList<>();
                     differencesByBin.put(binName, diffsForThisBin);
+                }
+                if (diffValue.getType() != DifferenceType.CONTENTS && isSubPartOfBin) {
+                    // A map key is missing on one side or the other for example, but at the bin
+                    // level it's really just that the contents are different.
+                    diffValue.setType(DifferenceType.CONTENTS);
                 }
                 diffsForThisBin.add(diffValue);
             }

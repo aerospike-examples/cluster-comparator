@@ -3,7 +3,7 @@ package com.aerospike.comparator;
 import com.aerospike.comparator.RecordComparator.DifferenceType;
 
 public class DifferenceValue {
-    private final DifferenceType type;
+    private DifferenceType type;
     private final Object obj1;
     private final Object obj2;
     private final int cluster1;
@@ -23,6 +23,9 @@ public class DifferenceValue {
     }
     public DifferenceType getType() {
         return type;
+    }
+    public void setType(DifferenceType type) {
+        this.type = type;
     }
     public Object getObj1() {
         return obj1;
