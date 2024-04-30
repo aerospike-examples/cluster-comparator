@@ -66,11 +66,14 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
     }
     
     @Override
-    public synchronized void handle(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] metadatas) throws IOException {
-        String missingClusters = missingFromClusters.stream().map(id->options.clusterIdToName(id)).collect(Collectors.toList()).toString();
-        String humanlyReadable = "Missing from clusters: " + missingClusters;
-        String json = "{\"MISSING\":" + missingClusters + "}";
-        writeDifference(partitionId, key, missingFromClusters, metadatas, json, humanlyReadable);
+    public synchronized void handle(int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] metadatas) throws IOException {
+        // If there are record level differences and binsOnly = true, the differences will be output in the record level handling phase.
+        if (!hasRecordLevelDifferences || !options.isBinsOnly()) {
+            String missingClusters = missingFromClusters.stream().map(id->options.clusterIdToName(id)).collect(Collectors.toList()).toString();
+            String humanlyReadable = "Missing from clusters: " + missingClusters;
+            String json = "{\"MISSING\":" + missingClusters + "}";
+            writeDifference(partitionId, key, missingFromClusters, metadatas, json, humanlyReadable);
+        }
     }
 
     private void writeDifference(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] metadatas, String ...differences) {
@@ -115,20 +118,18 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         writer.flush();
     }
     @Override
-    public synchronized void handle(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] metadatas) throws IOException {
+    public synchronized void handle(int partitionId, Key key, DifferenceCollection differences, List<Integer> missingFromClusters, RecordMetadata[] metadatas) throws IOException {
         
         if (options.isBinsOnly()) {
             RecordDifferences differencesOnRecord = differences.getBinsDifferent();
-            writeDifference(partitionId, key, null, metadatas,
-                    differencesOnRecord.toRawString(options),
-                    differencesOnRecord.toHumanString(options));
+            writeDifference(partitionId, key, missingFromClusters, metadatas,
+                    differencesOnRecord.toRawString(missingFromClusters, options),
+                    differencesOnRecord.toHumanString(missingFromClusters, options));
         }
         else {
             // Do not show the whole binary blob
-            // We have to manipulate this to make it valid CSV. Any double quotes become
-            // double double quote, then put the whole thing in double quotes.
             for (DifferenceSet diffSet : differences.getDifferenceSets()) {
-                writeDifference(partitionId, key, null, metadatas, diffSet.getAsJson(true, this.options).replaceAll("\"", "\"\""));
+                writeDifference(partitionId, key, missingFromClusters, metadatas, diffSet.getAsJson(true, this.options));
             }
         }
     }

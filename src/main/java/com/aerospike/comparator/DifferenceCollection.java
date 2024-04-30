@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.aerospike.client.Key;
 import com.aerospike.comparator.RecordComparator.DifferenceType;
@@ -29,12 +30,17 @@ public class DifferenceCollection {
                 binDiffs.add(diffs);
             }
         }
-        public String toHumanString(ClusterNameResolver resolver) {
-            if (binDiffs == null) {
+        public String toHumanString(List<Integer> missingFromClusters, ClusterNameResolver resolver) {
+            if (binDiffs == null && (missingFromClusters == null || missingFromClusters.isEmpty())) {
                 return "";
             }
             StringBuilder sb = new StringBuilder();
             boolean first = true;
+            if (missingFromClusters != null && !missingFromClusters.isEmpty()) {
+                sb.append("Missing from cluster(s) ")
+                  .append(missingFromClusters.stream().map(id->resolver.clusterIdToName(id)).collect(Collectors.toList()).toString());
+                first = false;
+            }
             for (BinDifferences theseDiffs : binDiffs) {
                 if (!first) {
                     sb.append(", ");
@@ -44,18 +50,29 @@ public class DifferenceCollection {
             }
             return sb.toString();
         }
-        public String toRawString(ClusterNameResolver resolver) {
-            if (binDiffs == null) {
+        public String toRawString(List<Integer> missingFromClusters, ClusterNameResolver resolver) {
+            if (binDiffs == null && (missingFromClusters == null || missingFromClusters.isEmpty())) {
                 return "";
             }
             StringBuilder sb = new StringBuilder().append('{');
-            boolean first = true;
-            for (BinDifferences theseDiffs : binDiffs) {
-                if (!first) {
-                    sb.append(", ");
+            if (missingFromClusters != null && !missingFromClusters.isEmpty()) {
+                String missingClusters = missingFromClusters.stream().map(id->resolver.clusterIdToName(id)).collect(Collectors.toList()).toString();
+                sb.append("\"MISSING\":").append(missingClusters);
+                if (binDiffs != null) {
+                    sb.append(',');
                 }
-                first = false;
-                sb.append(theseDiffs.toRawString(resolver));
+            }
+            if (binDiffs != null) {
+                sb.append("\"DIFFS\":{");
+                boolean first = true;
+                for (BinDifferences theseDiffs : binDiffs) {
+                    if (!first) {
+                        sb.append(", ");
+                    }
+                    first = false;
+                    sb.append(theseDiffs.toRawString(resolver));
+                }
+                sb.append('}');
             }
             return sb.append('}').toString();
         }
@@ -391,6 +408,6 @@ public class DifferenceCollection {
     
     @Override
     public String toString() {
-        return getBinsDifferent().toHumanString(null);
+        return getBinsDifferent().toHumanString(null, null);
     }
 }

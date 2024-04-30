@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import com.aerospike.client.Key;
-import com.aerospike.client.Record;
 import com.aerospike.client.command.Buffer;
 import com.aerospike.comparator.dbaccess.RecordMetadata;
 
@@ -16,7 +15,7 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
     }
     
     @Override
-    public void handle(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] recordMetadatas) throws IOException {
+    public void handle(int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] recordMetadatas) throws IOException {
         String recordMetadataDesc = "";
         if (recordMetadatas != null) {
             StringBuilder sb = new StringBuilder();
@@ -41,7 +40,7 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
     }
 
     @Override
-    public void handle(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] recordMetadatas)
+    public void handle(int partitionId, Key key, DifferenceCollection differences, List<Integer> missingFromClusters, RecordMetadata[] recordMetadatas)
             throws IOException {
         
         if (differences.isQuickCompare()) {

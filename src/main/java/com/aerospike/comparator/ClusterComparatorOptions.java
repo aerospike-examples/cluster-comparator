@@ -611,9 +611,11 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         return this.configOptions.isNamespaceNameOverridden(name);
     }
     
+    @Override
     public boolean isClusterIdValid(int id) {
         return (id >= 0 && id < this.getClusterConfigs().size());
     }
+    @Override
     public String clusterIdToName(int id) {
         if (!isClusterIdValid(id)) {
             throw new IllegalArgumentException(String.format("cluster id must be in the range of 0 to %d, not %d", this.getClusterConfigs().size()-1, id));
@@ -630,6 +632,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     /**
      * Return the 0-based index of the cluster with the passed name. If the cluster name does not exist, -1 is returned.
      */
+    @Override
     public int clusterNameToId(String name) {
         if (name == null) {
             throw new NullPointerException("name must not be null");
@@ -640,6 +643,12 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             }
         }
         return -1;
+    }
+    
+    @Override
+    public int getNumberOfClusters() {
+        // TODO Auto-generated method stub
+        return 0;
     }
     
     public boolean isSilent() {

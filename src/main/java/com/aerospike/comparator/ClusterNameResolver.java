@@ -18,4 +18,9 @@ public interface ClusterNameResolver {
      * Return the 0-based index of the cluster with the passed name. If the cluster name does not exist, -1 is returned.
      */
     int clusterNameToId(String name);
+    /**
+     * Returns the number of clusters in this comparison
+     * @return
+     */
+    int getNumberOfClusters();
 }

@@ -85,7 +85,7 @@ public class ClusterComparator {
         }
         
         @Override
-        public void handle(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] recordMetadatas) throws IOException {
+        public void handle(int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] recordMetadatas) throws IOException {
             for (int thisCluster : missingFromClusters ) {
                 recordsMissingOnCluster.incrementAndGet(thisCluster);
             }
@@ -94,7 +94,7 @@ public class ClusterComparator {
         }
 
         @Override
-        public void handle(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] recordMetadatas) throws IOException {
+        public void handle(int partitionId, Key key, DifferenceCollection differences, List<Integer> missingFromClusters, RecordMetadata[] recordMetadatas) throws IOException {
             recordsDifferentCount.incrementAndGet();
             checkDifferencesCount();
         }
@@ -292,10 +292,10 @@ public class ClusterComparator {
         return 0;
     }
 
-    private void differentRecords(int partitionId, Key key, DifferenceCollection differences, RecordMetadata[] recordMetadatas) {
+    private void differentRecords(int partitionId, Key key, DifferenceCollection differences, List<Integer> clustersWithRecord, RecordMetadata[] recordMetadatas) {
         for (RecordDifferenceHandler thisHandler : recordDifferenceHandlers) {
             try {
-                thisHandler.handle(partitionId, key, differences, recordMetadatas);
+                thisHandler.handle(partitionId, key, differences, clustersWithRecord, recordMetadatas);
             }
             catch (Exception e) {
                 System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
@@ -350,14 +350,15 @@ public class ClusterComparator {
         return true;
     }
     
-    private void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, int partitionId, Key keyMissing) {
+    private void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, 
+            boolean hasRecordLevelDifferences, int partitionId, Key keyMissing) {
         RecordMetadata[] recordMetadatas = getMetadata(clients, keyMissing, clustersWithoutRecord, null);
         if (!filterMissingRecordsByMasterId(recordMetadatas, clustersWithRecord, clustersWithoutRecord)) {
             return;
         }
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
             try {
-                thisHandler.handle(partitionId, keyMissing, clustersWithoutRecord, recordMetadatas);
+                thisHandler.handle(partitionId, keyMissing, clustersWithoutRecord, hasRecordLevelDifferences, recordMetadatas);
             }
             catch (Exception e) {
                 System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
@@ -506,13 +507,16 @@ public class ClusterComparator {
                         clustersWithoutRecord.add(i);
                     }
                 }
-                if (!clustersWithoutRecord.isEmpty()) 
-                    missingRecord(clients, clustersWithMaxDigest, clustersWithoutRecord, partitionId, keyWithLargestDigest);
-                
+                boolean hasRecordLevelDifferences = false;
                 // Need to compare the records with the maximum digest
                 if (options.isRecordLevelCompare()) {
-                    compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys);
+                    DifferenceCollection result = compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys);
+                    hasRecordLevelDifferences = result.hasDifferences();
                 }
+                if (!clustersWithoutRecord.isEmpty())  {
+                    missingRecord(clients, clustersWithMaxDigest, clustersWithoutRecord, hasRecordLevelDifferences, partitionId, keyWithLargestDigest);
+                }
+
                 for (int cluster : clustersWithMaxDigest) {
                     sidesValid[cluster] = getNextRecord(recordSets[cluster], cluster);
                 }
@@ -566,6 +570,21 @@ public class ClusterComparator {
         }
         return null;
     }
+    
+    /**
+     * Take a list of clusters and form the inverse of it. So the result will be an cluster which are not contained in the original cluster.
+     * @param clusterList
+     * @return a list of all clusters in the comparison which are not in the clusterList param
+     */
+    private List<Integer> invertClusterList(List<Integer> clusterList) {
+        List<Integer> result = new ArrayList<>();
+        for (int i = 0; i < numberOfClusters; i++) {
+            if (!clusterList.contains(i)) {
+                result.add(i);
+            }
+        }
+        return result;
+    }
     private DifferenceCollection compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys) {
         DifferenceCollection compareResult = new DifferenceCollection(clustersToCompare);
         for (int i = 0; i < clustersToCompare.size(); i++) {
@@ -585,7 +604,7 @@ public class ClusterComparator {
             RecordMetadata[] recordMetadatas = getMetadata(clients, getFirstNonNull(keys), null, clustersToCompare);
             // TODO: Master cluster logic
 //            if (compareResult.filterByLastUpdateTimes(options, recordMetadatas)) {
-                differentRecords(partitionId, getFirstNonNull(keys), compareResult, recordMetadatas);
+                differentRecords(partitionId, getFirstNonNull(keys), compareResult, invertClusterList(clustersToCompare), recordMetadatas);
 //            }
         }
         long totalRecsCompared = totalRecordsCompared.incrementAndGet();
@@ -690,8 +709,8 @@ public class ClusterComparator {
                                 clientsWithoutRecord.add(i);
                             }
                         });
-                        if (clientsWithoutRecord.size() > 0) {
-                            missingRecord(clients, clientsWithRecord, clientsWithoutRecord, partId, key);
+                        if (!clientsWithoutRecord.isEmpty()) {
+                            missingRecord(clients, clientsWithRecord, clientsWithoutRecord, false, partId, key);
                         }
                     }
                     else {
@@ -709,7 +728,6 @@ public class ClusterComparator {
                                 clustersWithRecord.add(i);
                             }
                         }
-                        missingRecord(clients, clustersWithRecord, clustersWithoutRecord, partId, key);
                         // For those with the record, iterate through all clusters with the record and compare them.
                         DifferenceCollection differenceCollection = new DifferenceCollection(clustersWithRecord);
                         for (int i = 0; i < clustersWithRecord.size(); i++) {
@@ -727,8 +745,12 @@ public class ClusterComparator {
                             RecordMetadata[] recordMetadatas = getMetadata(clients, key, clustersWithoutRecord, null);
                             // TODO: Master cluster logic
 //                            if (differenceCollection.filterByLastUpdateTimes(options, recordMetadatas)) {
-                                differentRecords(partId, key, differenceCollection, recordMetadatas);
+                                differentRecords(partId, key, differenceCollection, clustersWithoutRecord, recordMetadatas);
 //                            }
+                        }
+                        if (!clustersWithoutRecord.isEmpty()) {
+                            missingRecord(clients, clustersWithRecord, clustersWithoutRecord, 
+                                    differenceCollection.hasDifferences(), partId, key);
                         }
                         long totalRecsCompared = totalRecordsCompared.incrementAndGet();
                         if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
