@@ -13,6 +13,11 @@ public class PathOptions {
         this.paths = Arrays.asList(options);
     }
 
+    @Override
+    public String toString() {
+        return paths == null ? "[]" : paths.toString();
+    }
+    
     public List<PathOption> getPaths() {
         return paths;
     }
@@ -23,9 +28,11 @@ public class PathOptions {
     
     public EnumSet<PathAction> getActionsForPath(Deque<String> path) {
         EnumSet<PathAction> actions = EnumSet.noneOf(PathAction.class);
-        for (PathOption thisPath : paths) {
-            if (thisPath.matches(path)) {
-                actions.add(thisPath.getAction());
+        if (paths != null) {
+            for (PathOption thisPath : paths) {
+                if (thisPath.matches(path)) {
+                    actions.add(thisPath.getAction());
+                }
             }
         }
         return actions;

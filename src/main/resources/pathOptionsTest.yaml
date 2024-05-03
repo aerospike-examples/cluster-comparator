@@ -4,4 +4,8 @@ paths:
   action: compareUnordered
 - path: /**/ignore
   action: ignore
+- path: /test/compSet/ignoreDiff
+  action:  ignore
+- path: /test/compSet/ignoreDiffOther
+  action: ignore
   

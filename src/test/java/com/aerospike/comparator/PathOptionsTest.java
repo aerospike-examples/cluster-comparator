@@ -1,176 +1,432 @@
 package com.aerospike.comparator;
 
-import com.aerospike.comparator.AbstractBaseTest;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
+import com.aerospike.client.Record;
 
-public class PathOptionsTest extends AbstractBaseTest{
-    public static final String SET_NAME = "compTestSet";
-    
-    private String writeToFile(String pFilename, String data) throws IOException {
-        File tempDir = new File(System.getProperty("java.io.tmpdir"));
-        File tempFile = File.createTempFile(pFilename, ".tmp", tempDir);
-        String result = tempFile.getAbsolutePath();
-        FileWriter fileWriter = new FileWriter(tempFile, true);
-        System.out.println(tempFile.getAbsolutePath());
-        BufferedWriter bw = new BufferedWriter(fileWriter);
-        bw.write(data);
-        bw.close();
-        return result;
-    }
-    
-    private boolean removeFile(String filename) {
-        return new File(filename).delete();
-    }
-    
-    private String writeYamlToFile(String fileName, String ... lines) throws IOException {
-        String newLine = System.getProperty("line.separator");
-        String linesToWrite = String.join(newLine, lines);
-        return writeToFile(fileName, linesToWrite);
+public class PathOptionsTest {
+    @Test
+    public void fullPathMatch() {
+        PathOption option = new PathOption("/test/compSet/ignoreDiff", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+        
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("test");
+        assertFalse(option.matches(parts));
     }
     
     @Test
-    public void ignoreOptionTest() throws Exception {
-        
-        Key key = new Key("test", SET_NAME, 1);
-        getClient(0).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("ignore", 27));
-        getClient(1).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("ignore", 28));
-        
-        String[] args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES"};
-        ClusterComparatorOptions options = new ClusterComparatorOptions(args);
-        ClusterComparator comparator = new ClusterComparator(options);
-        DifferenceSummary differences = comparator.begin();
-        assertTrue(differences.areDifferent());
+    public void pathWithSingleWildcardAtEndMatch() {
+        PathOption option = new PathOption("/test/compSet/*", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
 
-        // Specify a YAML file with ignore to test
-        String fileName = writeYamlToFile("ignore.yaml", 
-                "---",
-                "paths:",
-                String.format("- path: /test/%s/ignore", SET_NAME),
-                "  action: ignore",
-                "");
-        try {
-            args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                    "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES", "-pf", fileName};
-            options = new ClusterComparatorOptions(args);
-            comparator = new ClusterComparator(options);
-            differences = comparator.begin();
-            assertFalse(differences.areDifferent());
-        }
-        catch (Exception e) {
-            System.err.printf("Unexpected exception thrown: %s (%s)", e.getMessage(), e.getClass().getName());
-            e.printStackTrace();
-            throw e;
-        }
-        finally {
-            getClient(0).delete(null, key);
-            getClient(1).delete(null, key);
-            removeFile(fileName);
-        }
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSetOther");
+        parts.add("test");
+        assertFalse(option.matches(parts));
+    }
+    
+    @Test
+    public void pathWithSingleWildcardAtStartMatch() {
+        PathOption option = new PathOption("/*/compSet/ignoreDiff", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("testOther");
+        assertFalse(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        assertFalse(option.matches(parts));
+    }
+    
+    @Test
+    public void pathWithSingleWildcardInMiddleMatch() {
+        PathOption option = new PathOption("/test/*/ignoreDiff", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("test");
+        assertFalse(option.matches(parts));
+    }
+    
+    @Test
+    public void pathWithSingleTrailingWildcard() {
+        PathOption option = new PathOption("/test/compSet/ignoreDiff/*", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertFalse(option.matches(parts));
+    }
+    
+    @Test
+    public void pathWithDoubleWildcardAtEndMatch() {
+        PathOption option = new PathOption("/test/compSet/**", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("ignoreSame");
+        parts.add("ignoreSame");
+        parts.add("ignoreSame");
+        parts.add("compSetOther");
+        parts.add("test");
+        assertFalse(option.matches(parts));
+    }
+    
+    @Test
+    public void pathWithDoubleWildcardAtStartMatch() {
+        PathOption option = new PathOption("/**/compSet/ignoreDiff", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("testOther");
+        assertFalse(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("compSet1");
+        parts.add("compSet2");
+        parts.add("compSet3");
+        assertTrue(option.matches(parts));
+}
+    
+    @Test
+    public void pathWithDoubleWildcardInMiddleMatch() {
+        PathOption option = new PathOption("/test/**/ignoreDiff", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreSame");
+        parts.add("compSet");
+        parts.add("test");
+        assertFalse(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet3");
+        parts.add("compSet2");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+
+        parts = new ArrayDeque<>();
+        parts.add("ignoreOther");
+        parts.add("compSet3");
+        parts.add("compSet2");
+        parts.add("compSet");
+        parts.add("test");
+        assertFalse(option.matches(parts));
     }
 
     @Test
-    public void ignoreOptionOnNestedPathTest() throws Exception {
+    public void pathWithDoubleTrailingWildcard() {
+        PathOption option = new PathOption("/test/compSet/ignoreDiff/**", PathAction.IGNORE);
+        Deque<String> parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        assertTrue(option.matches(parts));
+    }
+    
+    @Test
+    public void testRecordCompare() {
+        PathOption option = new PathOption("/test/compSet/ignoreDiff", PathAction.IGNORE);
+        PathOptions options = new PathOptions(option);
         
-        Key key = new Key("test", SET_NAME, 1);
-        Map<String, String> map = new HashMap<>();
-        map.put("abc", "123");
-        map.put("def", "456");
+        RecordComparator comparator =new RecordComparator();
+        Map<String, Object> map1 = new HashMap<>();
+        map1.put("name", "Tim");
+        map1.put("age", 312);
+        map1.put("ignoreDiff", true);
         
-        List<Object> list = new ArrayList<>();
-        list.add("12345");
-        list.add(map);
-        getClient(0).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("list", list));
-        map.put("def", "567");
-        getClient(1).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("list", list));
+        Map<String, Object> map2 = new HashMap<>();
+        map2.put("name", "Tim");
+        map2.put("age", 312);
+        map2.put("ignoreDiff", false);
         
-        String[] args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES"};
-        ClusterComparatorOptions options = new ClusterComparatorOptions(args);
-        ClusterComparator comparator = new ClusterComparator(options);
-        DifferenceSummary differences = comparator.begin();
-        assertTrue(differences.areDifferent());
+        Record r1 = new Record(map1, 1, 1);
+        Record r2 = new Record(map2, 1, 1);
+        Key key = new Key("test", "compSet",1);
+        DifferenceSet result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertFalse(result.areDifferent());
 
-        // Specify a YAML file with ignore to test
-        String fileName = writeYamlToFile("ignore.yaml", 
-                "---",
-                "paths:",
-                String.format("- path: /test/%s/list/1/def", SET_NAME),
-                "  action: ignore",
-                "");
-        try {
-            args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                    "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES", "-pf", fileName};
-            options = new ClusterComparatorOptions(args);
-            comparator = new ClusterComparator(options);
-            differences = comparator.begin();
-            assertFalse(differences.areDifferent());
-        }
-        catch (Exception e) {
-            System.err.printf("Unexpected exception thrown: %s (%s)", e.getMessage(), e.getClass().getName());
-            e.printStackTrace();
-            throw e;
-        }
-        finally {
-            getClient(0).delete(null, key);
-            getClient(1).delete(null, key);
-            removeFile(fileName);
-        }
+        options = new PathOptions();
+        result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertTrue(result.areDifferent());
     }
 
     @Test
-    public void unorderedOptionTest() throws Exception {
+    public void testRecordCompareWithWildcard() {
+        PathOption option = new PathOption("/test/compSet/*", PathAction.IGNORE);
+        PathOptions options = new PathOptions(option);
         
-        Key key = new Key("test", SET_NAME, 1);
-        getClient(0).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("unordered", List.of(1, 2, 3, 4, 5)));
-        getClient(1).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("unordered", List.of(5, 1, 2, 3, 4)));
+        RecordComparator comparator =new RecordComparator();
+        Map<String, Object> map1 = new HashMap<>();
+        map1.put("name", "Bob");
+        map1.put("age", 312);
+        map1.put("ignoreDiff", true);
         
-        String[] args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES"};
-        ClusterComparatorOptions options = new ClusterComparatorOptions(args);
-        ClusterComparator comparator = new ClusterComparator(options);
-        DifferenceSummary differences = comparator.begin();
-        assertTrue(differences.areDifferent());
+        Map<String, Object> map2 = new HashMap<>();
+        map2.put("name", "Tim");
+        map2.put("age", 312);
+        map2.put("ignoreDiff", false);
+        
+        Record r1 = new Record(map1, 1, 1);
+        Record r2 = new Record(map2, 1, 1);
+        DifferenceSet result = comparator.compare(new Key("test", "compSet",1), r1, r2, options, false, 0, 1);
+        assertFalse(result.areDifferent());
 
-        // Specify a YAML file with ignore to test
-        String fileName = writeYamlToFile("unordered.yaml", 
-                "---",
-                "paths:",
-                "- path: /test/*/unordered",
-                "  action: compareUnordered",
-                "");
-        try {
-            args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                    "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES", "-pf", fileName};
-            options = new ClusterComparatorOptions(args);
-            comparator = new ClusterComparator(options);
-            differences = comparator.begin();
-            assertFalse(differences.areDifferent());
-        }
-        catch (Exception e) {
-            System.err.printf("Unexpected exception thrown: %s (%s)", e.getMessage(), e.getClass().getName());
-            e.printStackTrace();
-            throw e;
-        }
-        finally {
-            getClient(0).delete(null, key);
-            getClient(1).delete(null, key);
-            removeFile(fileName);
-        }
+        options = new PathOptions();
+        result = comparator.compare(new Key("test", "compSet",1), r1, r2, options, false, 0, 1);
+        assertTrue(result.areDifferent());
+    }
+
+    @Test
+    public void testRecordCompareWithChildMap() {
+        PathOption option = new PathOption("/test/compSet/map/789/Aaa", PathAction.IGNORE);
+        PathOptions options = new PathOptions(option);
+        RecordComparator comparator =new RecordComparator();
+        
+        Map<String, Object> map1 = new HashMap<>();
+        map1.put("name", "Tim");
+        map1.put("age", 312);
+        map1.put("ignoreDiff", true);
+        Map<Object, Object> childMap1 = new HashMap<>();
+        childMap1.put(1, "!");
+        childMap1.put("A", "b");
+        childMap1.put("valid", true);
+        Map<Object, Object> childChildMap1 = new HashMap<>();
+        childChildMap1.put(123, 456);
+        childChildMap1.put("Aaa", "bbb");
+        childMap1.put(789, childChildMap1);
+        map1.put("map", childMap1);
+        
+        Map<String, Object> map2 = new HashMap<>();
+        map2.put("name", "Tim");
+        map2.put("age", 312);
+        map2.put("ignoreDiff", true);
+        Map<Object, Object> childMap2 = new HashMap<>();
+        childMap2.put(1, "!");
+        childMap2.put("A", "b");
+        childMap2.put("valid", true);
+        Map<Object, Object> childChildMap2 = new HashMap<>();
+        childChildMap2.put(123, 456);
+        childChildMap2.put("Aaa", "aaa");
+        childMap2.put(789, childChildMap2);
+        map2.put("map", childMap2);
+        
+        Record r1 = new Record(map1, 1, 1);
+        Record r2 = new Record(map2, 1, 1);
+        Key key = new Key("test", "compSet",1);
+        DifferenceSet result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertFalse(result.areDifferent());
+
+        options = new PathOptions();
+        result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertTrue(result.areDifferent());
+    }
+
+    @Test
+    public void testRecordCompareWithChildMapAndWildcard() {
+        PathOption option = new PathOption("/test/**/Aaa", PathAction.IGNORE);
+        PathOptions options = new PathOptions(option);
+        RecordComparator comparator =new RecordComparator();
+        
+        Map<String, Object> map1 = new HashMap<>();
+        map1.put("name", "Tim");
+        map1.put("age", 312);
+        map1.put("ignoreDiff", true);
+        Map<Object, Object> childMap1 = new HashMap<>();
+        childMap1.put(1, "!");
+        childMap1.put("A", "b");
+        childMap1.put("valid", true);
+        Map<Object, Object> childChildMap1 = new HashMap<>();
+        childChildMap1.put(123, 456);
+        childChildMap1.put("Aaa", "bbb");
+        childMap1.put(789, childChildMap1);
+        map1.put("map", childMap1);
+        
+        Map<String, Object> map2 = new HashMap<>();
+        map2.put("name", "Tim");
+        map2.put("age", 312);
+        map2.put("ignoreDiff", true);
+        Map<Object, Object> childMap2 = new HashMap<>();
+        childMap2.put(1, "!");
+        childMap2.put("A", "b");
+        childMap2.put("valid", true);
+        Map<Object, Object> childChildMap2 = new HashMap<>();
+        childChildMap2.put(123, 456);
+        childChildMap2.put("Aaa", "aaa");
+        childMap2.put(789, childChildMap2);
+        map2.put("map", childMap2);
+        
+        Record r1 = new Record(map1, 1, 1);
+        Record r2 = new Record(map2, 1, 1);
+        Key key = new Key("test", "compSet",1);
+        DifferenceSet result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertFalse(result.areDifferent());
+
+        options = new PathOptions();
+        result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertTrue(result.areDifferent());
+    }
+
+    @Test
+    public void testRecordCompareWithChildListAndMap() {
+        PathOption option = new PathOption("/test/compSet/list/3/Aaa", PathAction.IGNORE);
+        PathOptions options = new PathOptions(option);
+        RecordComparator comparator =new RecordComparator();
+        
+        Map<String, Object> map1 = new HashMap<>();
+        map1.put("name", "Tim");
+        map1.put("age", 312);
+        map1.put("ignoreDiff", true);
+        List<Object> childList1 = new ArrayList<>();
+        childList1.add("!");
+        childList1.add("b");
+        childList1.add(true);
+        Map<Object, Object> childChildMap1 = new HashMap<>();
+        childChildMap1.put(123, 456);
+        childChildMap1.put("Aaa", "bbb");
+        childList1.add(childChildMap1);
+        map1.put("list", childList1);
+        
+        Map<String, Object> map2 = new HashMap<>();
+        map2.put("name", "Tim");
+        map2.put("age", 312);
+        map2.put("ignoreDiff", true);
+        List<Object> childList2 = new ArrayList<>();
+        childList2.add("!");
+        childList2.add("b");
+        childList2.add(true);
+        Map<Object, Object> childChildMap2 = new HashMap<>();
+        childChildMap2.put(123, 456);
+        childChildMap2.put("Aaa", "aaa");
+        childList2.add(childChildMap2);
+        map2.put("list", childList2);
+        
+        Record r1 = new Record(map1, 1, 1);
+        Record r2 = new Record(map2, 1, 1);
+        Key key = new Key("test", "compSet",1);
+        DifferenceSet result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertFalse(result.areDifferent());
+
+        options = new PathOptions();
+        result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertTrue(result.areDifferent());
+    }
+
+    @Test
+    public void testRecordCompareWithChildList() {
+        PathOption option = new PathOption("/test/compSet/list/2", PathAction.IGNORE);
+        PathOptions options = new PathOptions(option);
+        RecordComparator comparator =new RecordComparator();
+        
+        Map<String, Object> map1 = new HashMap<>();
+        map1.put("name", "Tim");
+        map1.put("age", 312);
+        map1.put("ignoreDiff", true);
+        List<Object> childList1 = new ArrayList<>();
+        childList1.add("!");
+        childList1.add("b");
+        childList1.add(true);
+        childList1.add(1);
+        map1.put("list", childList1);
+        
+        Map<String, Object> map2 = new HashMap<>();
+        map2.put("name", "Tim");
+        map2.put("age", 312);
+        map2.put("ignoreDiff", true);
+        List<Object> childList2 = new ArrayList<>();
+        childList2.add("!");
+        childList2.add("b");
+        childList2.add(false);
+        childList2.add(1);
+        map2.put("list", childList2);
+        
+        Record r1 = new Record(map1, 1, 1);
+        Record r2 = new Record(map2, 1, 1);
+        Key key = new Key("test", "compSet",1);
+        DifferenceSet result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertFalse(result.areDifferent());
+
+        options = new PathOptions();
+        result = comparator.compare(key, r1, r2, options, false, 0, 1);
+        assertTrue(result.areDifferent());
     }
 }

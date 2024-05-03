@@ -14,7 +14,11 @@ public class PathOption {
         this.setPath(path);
         this.action = action;
     }
-    
+
+    @Override
+    public String toString() {
+        return getPath() + " " + action;
+    }
     public String getPath() {
         return path;
     }
@@ -84,9 +88,18 @@ public class PathOption {
                 }
             }
         }
-        if (isOnWildcard && index < this.pathParts.length) {
-            return false;
+        if (index < this.pathParts.length) {
+            // This matches only if the remaining items are ** wildcards
+            for (int i = index; i < this.pathParts.length; i++) {
+                if (!"**".equals(this.pathParts[index])) {
+                    return false;
+                }
+            }
+            return true;
         }
+//        if (!isOnWildcard && index < this.pathParts.length) {
+//            return false;
+//        }
         return true;
     }
     
@@ -99,5 +112,63 @@ public class PathOption {
         parts.add("12");
         parts.add("name");
         System.out.println(option.matches(parts));
+        
+        option = new PathOption("/test/compSet/ignoreDiff", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be false");
+        
+        option = new PathOption("/test/compSet/*", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be false");
+        
+        option = new PathOption("/test/compSet/**", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be true");
+        
+        option = new PathOption("/test/compSet", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be true");
+        
+        option = new PathOption("/test/compSet/ignoreDiff", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be false");
+        
+        option = new PathOption("/test/**/ignoreDiff", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be true");
+        
+        option = new PathOption("/**/ignoreDiff", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be true");
+        
+        option = new PathOption("/test/compSet/ignoreDiff/**", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be true");
+        
+        option = new PathOption("/**", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("ignoreDiff");
+        parts.add("compSet");
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be true");
     }
 }

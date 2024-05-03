@@ -34,16 +34,14 @@ public class DifferenceSet {
     
     public EnumSet<PathAction> getOptionsForCurrentPath() {
         if (pathOptions != null) {
-            EnumSet<PathAction> options = pathOptions.getActionsForPath(pathParts);
-            return options;
+            return pathOptions.getActionsForPath(pathParts);
         }
         return null;
     }
     
     public boolean shouldIgnoreCurrentPath() {
         if (pathOptions != null) {
-            EnumSet<PathAction> options = pathOptions.getActionsForPath(pathParts);
-            return options.contains(PathAction.IGNORE);
+            return pathOptions.getActionsForPath(pathParts).contains(PathAction.IGNORE);
         }
         return false;
     }
@@ -76,14 +74,18 @@ public class DifferenceSet {
         return sb.toString();
     }
 
+    public void addDifference(DifferenceType difference, Object obj1, Object obj2, int cluster1, int cluster2) {
+        this.addDifference("", difference, obj1, obj2, cluster1, cluster2);
+    }
     public void addDifference(String path, DifferenceType difference, Object obj1, Object obj2, int cluster1, int cluster2) {
-        String fullPath = pathParts.size() == 0 ? path : this.getCurrentPath() + path;
-        this.differences.put(fullPath, new DifferenceValue(difference, obj1, obj2, cluster1, cluster2));
+        if (!shouldIgnoreCurrentPath()) {
+            String fullPath = pathParts.size() == 0 ? path : this.getCurrentPath() + path;
+            this.differences.put(fullPath, new DifferenceValue(difference, obj1, obj2, cluster1, cluster2));
+        }
     }
 
-    public void addDifference(String path, DifferenceType difference, Object obj1, Object obj2, int index, int cluster1, int cluster2) {
-        String fullPath = pathParts.size() == 0 ? path : this.getCurrentPath() + path;
-        this.differences.put(fullPath, new DifferenceValue(difference, obj1, obj2, index, cluster1, cluster2));
+    public void addDifference(DifferenceType difference, Object obj1, Object obj2, int index, int cluster1, int cluster2) {
+        this.differences.put(this.getCurrentPath(), new DifferenceValue(difference, obj1, obj2, index, cluster1, cluster2));
     }
     public Map<String, DifferenceValue> getDifferences() {
         return differences;
@@ -115,9 +117,11 @@ public class DifferenceSet {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
+        sb.append("Diffs:[");
         for (String key : differences.keySet()) {
             sb.append(key).append(": ").append(differences.get(key)).append(" ");
         }
+        sb.append("]\ncurrentPath:").append(pathParts).append("\noptions:").append(pathOptions);
         return sb.toString();
     }
     

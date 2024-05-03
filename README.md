@@ -223,10 +223,10 @@ options:
                                  connections
 ```
 The most significant options are:
-* -h1, h2: Specify the clusters to connect to
-* -n: The namespace(s) to compare, a comma separated list
-* -s: The sets to compare, if desired. This is an optional comma separated list
-* -C: The compare mode to use. This can be quick (comparing record counts on a per-partition basis and only compare those that are different) all the way through to a complete records level comparison)
+* -h1, h2: Specify the cluster connection details.
+* -n: The namespace(s) to compare, a comma separated list. At least one value must be provided.
+* -s: The sets to compare, if desired. This is an optional comma separated list.
+* -C: The compare mode to use. This can be quick (comparing record counts on a per-partition basis and only compare those that are different) all the way through to a complete records level comparison
 * -a: The action to take. Should the records be scanned, or scanned and then touched if they're missing for example
 * -t: The number of threads. 
 
