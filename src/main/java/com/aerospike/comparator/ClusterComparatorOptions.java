@@ -354,7 +354,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         
         if (this.configOptions != null) {
             this.clusters = this.configOptions.getClusters();
-            configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
+            if (this.getConfigOptions().getClusters() != null) {
+                configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
+            }
         }
         if (this.clusters == null) {
             this.clusters = new ArrayList<>();
@@ -368,7 +370,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             cluster.setUserName(getUserName1());
             cluster.setUseServicesAlternate(isServicesAlternate1());
             cluster.setTls(getTlsOptions1());
-            this.clusters.add(cluster);
+            if (cluster.getHostName() != null && !cluster.getHostName().isEmpty()) {
+                this.clusters.add(cluster);
+            }
 
             cluster = new ClusterConfig();
             cluster.setAuthMode(getAuthMode2());
@@ -378,7 +382,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             cluster.setUserName(getUserName2());
             cluster.setUseServicesAlternate(isServicesAlternate2());
             cluster.setTls(getTlsOptions2());
-            this.clusters.add(cluster);
+            if (cluster.getHostName() != null && !cluster.getHostName().isEmpty()) {
+                this.clusters.add(cluster);
+            }
         }
         else {
             // Cluster configs can be specified in the config file or command line options 
@@ -395,10 +401,11 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         if (this.isRemoteServer()) {
             if (this.clusters.size() != 1) {
                 System.out.printf("One cluster must be specified on the command line (host1 argument) or in the config file");
+                valid = false;
             }
             else {
                 //
-                valid = hasErrors;
+                valid = !hasErrors;
             }
         }
         else {
@@ -613,7 +620,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     
     @Override
     public boolean isClusterIdValid(int id) {
-        return (id >= 0 && id < this.getClusterConfigs().size());
+        return (id >= 0 && id < this.getNumberOfClusters());
     }
     @Override
     public String clusterIdToName(int id) {
@@ -637,9 +644,11 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         if (name == null) {
             throw new NullPointerException("name must not be null");
         }
-        for (int i = 0; i < this.getClusterConfigs().size(); i++) {
-            if (name.equals(this.getClusterConfigs().get(i).getClusterName())) {
-                return i;
+        if (this.getClusterConfigs() != null) {
+            for (int i = 0; i < this.getClusterConfigs().size(); i++) {
+                if (name.equals(this.getClusterConfigs().get(i).getClusterName())) {
+                    return i;
+                }
             }
         }
         return -1;
@@ -647,8 +656,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     
     @Override
     public int getNumberOfClusters() {
-        // TODO Auto-generated method stub
-        return 0;
+        return this.clusters.size();
     }
     
     public boolean isSilent() {
@@ -692,7 +700,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     }
     
     public ConfigOptions getConfigOptions() {
-        return this.getConfigOptions();
+        return this.configOptions;
     }
     
     private String getHosts1() {
