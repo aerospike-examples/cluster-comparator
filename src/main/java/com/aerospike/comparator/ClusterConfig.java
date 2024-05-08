@@ -1,5 +1,6 @@
 package com.aerospike.comparator;
 
+import com.aerospike.client.lua.LuaStreamLib.tostring;
 import com.aerospike.client.policy.AuthMode;
 
 public class ClusterConfig {
@@ -51,5 +52,9 @@ public class ClusterConfig {
     }
     public void setUseServicesAlternate(boolean useServicesAlternate) {
         this.useServicesAlternate = useServicesAlternate;
+    }
+    @Override
+    public String toString() {
+        return String.format("name:%s, host:%s, user:%s", this.clusterName, this.hostName, this.userName);
     }
 }

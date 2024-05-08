@@ -49,13 +49,17 @@ public class NamespaceMapping {
                     }
                 }
                 else if (thisMap.getClusterIndex() > 0) {
-                    if (!resolver.isClusterIdValid(thisMap.getClusterIndex())) {
-                        return String.format("Mapping for namespace '%s' has a cluster index of %d which is greater than the number of clusters",
-                                namespace, thisMap.getClusterIndex());
+                    if (!resolver.isClusterIdValid(thisMap.getInternalClusterIndex())) {
+                        return String.format("Mapping for namespace '%s' has a cluster index of %d which is outside the range of [0, %d)",
+                                namespace, thisMap.getClusterIndex(), resolver.getNumberOfClusters());
                     }
                 }
             }
         }
         return null;
+    }
+    @Override
+    public String toString() {
+        return String.format("%s->%s", this.namespace, this.mappings);
     }
 }

@@ -22,6 +22,11 @@ public class ConfigOptions {
         this.namespaceMapping = namespaceMapping;
     }
     
+    @Override
+    public String toString() {
+        return String.format("ClusterConfigs: %s\nNamespace Mappings: %s", this.clusters, this.namespaceMapping);
+    }
+    
     /**
      * Map any cluster names to cluster ordinals and detect any errors.
      * @param resolver
@@ -45,7 +50,7 @@ public class ConfigOptions {
             for (NamespaceMapping thisMapping : this.namespaceMapping) {
                 if (thisMapping.getNamespace().equals(name)) {
                     for (NamespaceMap thisMap : thisMapping.getMappings()) {
-                        if (thisMap.getClusterIndex() == clusterOrdinal+1) {
+                        if (thisMap.getInternalClusterIndex() == clusterOrdinal) {
                             return thisMap.getName();
                         }
                     }

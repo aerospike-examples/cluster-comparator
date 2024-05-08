@@ -1,6 +1,6 @@
 ---
 namespaceMapping:
-- namespace: test
+- namespace: testSrc
   mappings:
-  - clusterName: aws-west-2
-    name: bar
+  - clusterIndex: 2
+    name: testDest
