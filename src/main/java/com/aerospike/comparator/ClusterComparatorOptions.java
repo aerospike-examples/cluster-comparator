@@ -354,9 +354,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         
         if (this.configOptions != null) {
             this.clusters = this.configOptions.getClusters();
-            if (this.getConfigOptions().getClusters() != null) {
-                configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
-            }
+//            configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
         }
         if (this.clusters == null) {
             this.clusters = new ArrayList<>();
@@ -395,6 +393,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
             }
         }
 
+        if (!hasErrors && this.configOptions != null) {
+            configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
+        }
         if (this.masterCluster >= 0) {
             this.showMetadata = true;
         }

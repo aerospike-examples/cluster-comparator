@@ -2,5 +2,5 @@
 namespaceMapping:
 - namespace: test
   mappings:
-  - clusterIndex: 2
+  - clusterName: aws-west-2
     name: bar
