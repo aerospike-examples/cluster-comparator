@@ -5,6 +5,7 @@ import com.aerospike.client.Value;
 
 public class FileLine {
     private final String namespace;
+    private final String partitionId;
     private final String setName;
     private final String userKey;
     private final String[] digests;
@@ -12,13 +13,14 @@ public class FileLine {
     public FileLine(String line) {
         String[] linePart = line.split(",");
         int numberOfClusters = 2;
-        int digestOffset = 3;
+        int digestOffset = 4;
         this.namespace = linePart[0];
         this.setName = linePart[1];
-        this.userKey = linePart[2];
-        if (linePart[3].matches("\\d+")) {
-            numberOfClusters = Integer.parseInt(linePart[3]);
-            digestOffset = 4;
+        this.partitionId = linePart[2];
+        this.userKey = linePart[3];
+        if (linePart[4].matches("\\d+")) {
+            numberOfClusters = Integer.parseInt(linePart[4]);
+            digestOffset = 5;
         }
         this.digests = new String[numberOfClusters];
         for (int i = 0; i < numberOfClusters; i++) {
@@ -82,11 +84,12 @@ public class FileLine {
         if (i < 0 || i >= digests.length) {
             throw new IllegalArgumentException(String.format("key must be in the range 0 to %d, not %d",  digests.length, i));
         }
-        if (userKey != null) {
-            return new Key(this.namespace, this.setName, this.userKey);
-        }
+        // Use a digest in preference to a user key as it's difficult to tell the difference between "2" and 2
         if (hasDigest(i)) {
             return new Key(this.namespace, hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
+        }
+        if (userKey != null) {
+            return new Key(this.namespace, this.setName, this.userKey);
         }
         throw new IllegalStateException("Could not find any digest or user key");
     }

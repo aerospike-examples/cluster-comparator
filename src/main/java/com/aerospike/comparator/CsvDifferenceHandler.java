@@ -47,8 +47,10 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         sb.append("Diffs");
         this.FILE_HEADER = sb.toString();
 
-        writer.println(FILE_HEADER);
-        writer.flush();
+        if (writer != null) {
+            writer.println(FILE_HEADER);
+            writer.flush();
+        }
     }
     
     public String getFileHeader() {

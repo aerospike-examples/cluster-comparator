@@ -901,13 +901,13 @@ public class ClusterComparator {
         
         if (!options.isSilent()) {
             if (options.isRecordLevelCompare()) {
-                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i, this.recordsMissingOnCluster.get(i)));
+                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i+1, this.recordsMissingOnCluster.get(i)));
                 System.out.printf("Records different         : %,d\n"
                                 + "Records compared          : %,d\n", 
                         this.recordsDifferentCount.get(), this.totalRecordsCompared.get());
             }
             else {
-                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i, this.recordsMissingOnCluster.get(i)));
+                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i+1, this.recordsMissingOnCluster.get(i)));
             }
             if (this.forceTerminate) {
                 if (this.totalMissingRecords.get() >= this.options.getMissingRecordsLimit()) {
