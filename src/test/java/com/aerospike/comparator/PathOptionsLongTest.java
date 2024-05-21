@@ -3,10 +3,6 @@ package com.aerospike.comparator;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,30 +14,6 @@ import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 
 public class PathOptionsLongTest extends AbstractBaseTest{
-    public static final String SET_NAME = "compTestSet";
-    
-    private String writeToFile(String pFilename, String data) throws IOException {
-        File tempDir = new File(System.getProperty("java.io.tmpdir"));
-        File tempFile = File.createTempFile(pFilename, ".tmp", tempDir);
-        String result = tempFile.getAbsolutePath();
-        FileWriter fileWriter = new FileWriter(tempFile, true);
-        System.out.println(tempFile.getAbsolutePath());
-        BufferedWriter bw = new BufferedWriter(fileWriter);
-        bw.write(data);
-        bw.close();
-        return result;
-    }
-    
-    private boolean removeFile(String filename) {
-        return new File(filename).delete();
-    }
-    
-    private String writeYamlToFile(String fileName, String ... lines) throws IOException {
-        String newLine = System.getProperty("line.separator");
-        String linesToWrite = String.join(newLine, lines);
-        return writeToFile(fileName, linesToWrite);
-    }
-    
     @Test
     public void ignoreOptionTest() throws Exception {
         getClient(0).truncate(null, "test", SET_NAME, null);

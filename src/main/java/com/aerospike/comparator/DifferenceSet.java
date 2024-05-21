@@ -85,7 +85,9 @@ public class DifferenceSet {
     }
 
     public void addDifference(DifferenceType difference, Object obj1, Object obj2, int index, int cluster1, int cluster2) {
-        this.differences.put(this.getCurrentPath(), new DifferenceValue(difference, obj1, obj2, index, cluster1, cluster2));
+        if (!shouldIgnoreCurrentPath()) {
+            this.differences.put(this.getCurrentPath(), new DifferenceValue(difference, obj1, obj2, index, cluster1, cluster2));
+        }
     }
     public Map<String, DifferenceValue> getDifferences() {
         return differences;
