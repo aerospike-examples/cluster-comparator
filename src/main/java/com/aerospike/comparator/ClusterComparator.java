@@ -1013,7 +1013,10 @@ public class ClusterComparator {
             if (isDone()) {
                 return null;
             }
-            return lines.take();
+            // It is possible for the producer to finish producing before a line is taken if the file is empty.
+            // In that case, using <code>lines.take()</code> would wait forever. Hence <code>poll</code> is used
+            // instead with a lenient timeout to resolve this race condition
+            return lines.poll(10, TimeUnit.SECONDS);
         }
         
         public boolean isDone() {
