@@ -664,7 +664,8 @@ public class ClusterComparator {
                     recordMetadatas[i] = null;
                 }
                 else {
-                    recordMetadatas[i] = clients[i].getMetadata(null, key);
+                    Key namespaceResolvedKey = new Key(options.getNamespaceName(key.namespace, i), key.digest, key.setName, key.userKey);
+                    recordMetadatas[i] = clients[i].getMetadata(null, namespaceResolvedKey);
                 }
             }
         }
@@ -702,7 +703,8 @@ public class ClusterComparator {
                         List<Integer> clientsWithRecord = new ArrayList<>();
                         List<Integer> clientsWithoutRecord = new ArrayList<>();
                         forEachCluster((i, c) -> {
-                            if (clients[i].exists(null, key)) {
+                            Key namespaceResolvedKey = line.getKey(i);
+                            if (clients[i].exists(null, namespaceResolvedKey)) {
                                 clientsWithRecord.add(i);
                             }
                             else {
@@ -720,7 +722,8 @@ public class ClusterComparator {
                         List<Integer> clustersWithRecord = new ArrayList<>();
                         List<Integer> clustersWithoutRecord = new ArrayList<>();
                         for (int i = 0; i < clients.length; i++) {
-                            records[i] = clients[i].get(null, key);
+                            Key namespaceResolvedKey = line.getKey(i);
+                            records[i] = clients[i].get(null, namespaceResolvedKey);
                             if (records[i] == null) {
                                 clustersWithoutRecord.add(i);
                             }
@@ -1038,7 +1041,7 @@ public class ClusterComparator {
             }
 
             while ((line = br.readLine()) != null) {
-                processor.process(clients, new FileLine(line));
+                processor.process(clients, new FileLine(line, this.options));
             }
         } finally {
             br.close();

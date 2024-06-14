@@ -25,7 +25,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
  * @author tfaulkes
  *
  */
-public class ClusterComparatorOptions implements ClusterNameResolver {
+public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceNameResolver {
     private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-hh:mm:ssZ";
     public static enum Action {
         SCAN(false, true),
@@ -491,7 +491,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
     public ClusterComparatorOptions(String[] arguments) throws Exception {
         Options options = formOptions();
         CommandLineParser parser = new DefaultParser();
-        CommandLine cl = parser.parse(options, arguments, false);
+        CommandLine cl = parser.parse(options, arguments, true);
         
         if (cl.hasOption("usage")) {
             usage(options);
@@ -603,12 +603,24 @@ public class ClusterComparatorOptions implements ClusterNameResolver {
         this.validate(options, cl);
     }
 
+    @Override
     public String getNamespaceName(String name, int clusterOrdinal) {
         if (this.configOptions == null) {
             return name;
         }
         else {
             return this.configOptions.getNamespace(name, clusterOrdinal);
+        }
+    }
+    
+    @Override
+    public String getNamespaceNameViaSource(String name, int clusterOrdinal) {
+        if (this.namespaces.length == 1) {
+            // Simple case
+            return this.getNamespaceName(this.namespaces[0], clusterOrdinal);
+        }
+        else {
+            return this.getNamespaceName(this.configOptions.findSourceNamespaceFor(name), clusterOrdinal);
         }
     }
     

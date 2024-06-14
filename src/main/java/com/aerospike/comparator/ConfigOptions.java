@@ -59,6 +59,30 @@ public class ConfigOptions {
         }
         return name;
     }
+    
+    /** 
+     * Perform a reverse namespace mapping. So if namespace A is mapped to namespace B on cluster 2, and 
+     * namespace B is passed, A will be returned.
+     * <p/>
+     * NOTE: This method performs a "best guess" for this resolution as there is no guarantee that multiple
+     * namesapces do not map to the same namesapce. Eg A->B, C->B, there is no way of ensuring the correct
+     * cluster is returned
+     * @param name
+     * @return
+     */
+    public String findSourceNamespaceFor(String name) {
+        if (namespaceMapping != null) {
+            for (NamespaceMapping thisMapping : this.namespaceMapping) {
+                List<NamespaceMap> mappings = thisMapping.getMappings();
+                for (NamespaceMap thisMap : mappings) {
+                    if (name.equals(thisMap.getName())) {
+                        return thisMapping.getNamespace();
+                    }
+                }
+            }
+        }
+        return name;
+    }
 
     public boolean isNamespaceNameOverridden(String name) {
         if (namespaceMapping != null) {

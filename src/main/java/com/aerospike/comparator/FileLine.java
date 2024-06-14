@@ -9,8 +9,9 @@ public class FileLine {
     private final String setName;
     private final String userKey;
     private final String[] digests;
+    private final NamespaceNameResolver resolver;
     
-    public FileLine(String line) {
+    public FileLine(String line, NamespaceNameResolver resolver) {
         String[] linePart = line.split(",");
         int numberOfClusters = 2;
         int digestOffset = 4;
@@ -18,6 +19,7 @@ public class FileLine {
         this.setName = linePart[1];
         this.partitionId = linePart[2];
         this.userKey = linePart[3];
+        this.resolver = resolver;
         if (linePart[4].matches("\\d+")) {
             numberOfClusters = Integer.parseInt(linePart[4]);
             digestOffset = 5;
@@ -53,6 +55,9 @@ public class FileLine {
         return digests[digestNumber];
     }
 
+    public String getPartitionId() {
+        return partitionId;
+    }
     
     public boolean hasDigest(int digestNumber) {
         return digestNumber >= 0 && digestNumber < digests.length && !digests[digestNumber].isEmpty();
@@ -69,15 +74,15 @@ public class FileLine {
     }
 
     public Key getKey() {
-        if (!this.userKey.isEmpty()) {
-            return new Key(this.namespace, this.setName, this.userKey);
-        }
         for (int i = 0; i < digests.length; i++) {
             if (hasDigest(i)) {
-                return new Key(this.namespace, hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
+                if (!this.userKey.isEmpty()) {
+                    return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), this.setName, this.userKey);
+                }
+                return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
             }
         }
-        throw new IllegalStateException("Could not find any digest or user key");
+        throw new IllegalStateException("Could not find any valid digest");
     }
 
     public Key getKey(int i) {
@@ -86,10 +91,10 @@ public class FileLine {
         }
         // Use a digest in preference to a user key as it's difficult to tell the difference between "2" and 2
         if (hasDigest(i)) {
-            return new Key(this.namespace, hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
+            return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
         }
         if (userKey != null) {
-            return new Key(this.namespace, this.setName, this.userKey);
+            return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), this.setName, this.userKey);
         }
         throw new IllegalStateException("Could not find any digest or user key");
     }
