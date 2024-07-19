@@ -100,7 +100,7 @@ public class RemoteUtils {
             dos.writeInt(policy.socketTimeout);
             dos.writeInt(policy.totalTimeout);
             dos.writeBoolean(policy.sendKey);
-            dos.writeUTF(policy.replica.toString());
+            dos.writeUTF(policy.replica == null ? "" : policy.replica.toString());
         }
     }
     
@@ -115,7 +115,8 @@ public class RemoteUtils {
             policyToChange.socketTimeout = dis.readInt();
             policyToChange.totalTimeout = dis.readInt();
             policyToChange.sendKey = dis.readBoolean();
-            policyToChange.replica = Replica.valueOf(dis.readUTF());
+            String replica = dis.readUTF();
+            policyToChange.replica = replica == null || replica.length() == 0 ? null : Replica.valueOf(replica);
             return policyToChange;
         }
     }

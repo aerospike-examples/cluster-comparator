@@ -759,8 +759,8 @@ public class ClusterComparator {
                         if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
                             forceTerminate = true;
                         }
-                        
                     }
+                    forEachCluster((i, c) -> recordsProcessedOnCluster.incrementAndGet(i));
                 }
             }
             catch (InterruptedException ie) {

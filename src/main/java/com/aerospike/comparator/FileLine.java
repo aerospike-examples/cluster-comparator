@@ -54,6 +54,15 @@ public class FileLine {
     public String getDigest(int digestNumber) {
         return digests[digestNumber];
     }
+    
+    public String getDigest() {
+        for (int i = 0; i < digests.length; i++) {
+            if (digests[i] != null && !digests[i].isEmpty()) {
+                return digests[i];
+            }
+        }
+        return null;
+    }
 
     public String getPartitionId() {
         return partitionId;
@@ -90,8 +99,10 @@ public class FileLine {
             throw new IllegalArgumentException(String.format("key must be in the range 0 to %d, not %d",  digests.length, i));
         }
         // Use a digest in preference to a user key as it's difficult to tell the difference between "2" and 2
-        if (hasDigest(i)) {
-            return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), hexStringToByteArray(getDigest(i)), this.setName, Value.get(this.userKey));
+        // Note that if digests exists on the record they will all be identical so we can just use the first one we find.
+        String digest = getDigest();
+        if (digest != null) {
+            return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), hexStringToByteArray(digest), this.setName, Value.get(this.userKey));
         }
         if (userKey != null) {
             return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), this.setName, this.userKey);
