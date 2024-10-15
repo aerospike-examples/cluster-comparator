@@ -38,7 +38,7 @@ public class LocalAerospikeClient implements AerospikeClientAccess {
         this.client.touch(policy, key);
     }
     @Override
-    public boolean exists(WritePolicy policy, Key key) {
+    public boolean exists(Policy policy, Key key) {
         return this.client.exists(policy, key);
     }
     @Override

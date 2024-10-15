@@ -93,7 +93,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
     }
 
     @Override
-    public boolean exists(WritePolicy policy, Key key) {
+    public boolean exists(Policy policy, Key key) {
         Connection conn = null;
         try {
             conn = this.pool.borrow();

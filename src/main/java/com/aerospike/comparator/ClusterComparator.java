@@ -35,8 +35,10 @@ import com.aerospike.client.cluster.Partition;
 import com.aerospike.client.exp.Exp;
 import com.aerospike.client.exp.Expression;
 import com.aerospike.client.policy.ClientPolicy;
+import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.QueryPolicy;
 import com.aerospike.client.policy.TlsPolicy;
+import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
 import com.aerospike.comparator.ClusterComparatorOptions.Action;
@@ -74,8 +76,12 @@ public class ClusterComparator {
     private final ClusterComparatorOptions options;
     private int threadsToUse;
     private List<Integer> partitionList = new ArrayList<>();
+    private List<Integer> failedPartitionsList = new ArrayList<>();
     private Expression filterExpresion = null;
     private final int numberOfClusters;
+    
+    private final Policy tolerantReadPolicy = new Policy();
+    private final WritePolicy tolerantWritePolicy = new WritePolicy();
     
     private class InternalHandler implements MissingRecordHandler, RecordDifferenceHandler {
         private void checkDifferencesCount() {
@@ -113,6 +119,16 @@ public class ClusterComparator {
         recordsProcessedOnCluster = new AtomicLongArray(numberOfClusters);
         recordsMissingOnCluster = new AtomicLongArray(numberOfClusters);
 
+        this.tolerantReadPolicy.totalTimeout = 5000;
+        this.tolerantReadPolicy.socketTimeout = 200;
+        this.tolerantReadPolicy.maxRetries = 25;
+        this.tolerantReadPolicy.sleepBetweenRetries = 500;
+        
+        this.tolerantWritePolicy.totalTimeout = 5000;
+        this.tolerantWritePolicy.socketTimeout = 200;
+        this.tolerantWritePolicy.maxRetries = 25;
+        this.tolerantWritePolicy.sleepBetweenRetries = 500;
+        
         InternalHandler handler = new InternalHandler();
         this.missingRecordHandlers.add(handler);
         this.recordDifferenceHandlers.add(handler);
@@ -195,6 +211,8 @@ public class ClusterComparator {
         clientPolicy.authMode = config.getAuthMode();
         clientPolicy.clusterName = config.getClusterName();
         clientPolicy.useServicesAlternate = config.isUseServicesAlternate();
+        clientPolicy.minConnsPerNode = this.threadsToUse;
+
         String hostNames = config.getHostName();
         if (hostNames.startsWith("remote:")) {
             // Ignore any addresses after the first
@@ -445,6 +463,12 @@ public class ClusterComparator {
         queryPolicy.shortQuery = false;
         queryPolicy.filterExp = this.filterExpresion;
         
+        // Set long timeouts and retries to allow for servers to fail and partition ownership to move over
+        queryPolicy.totalTimeout = 30000;
+        queryPolicy.sleepBetweenRetries = 2000;
+        queryPolicy.maxRetries = 10;
+        queryPolicy.socketTimeout = 2000;
+        
         int rps = options.getRps()/this.threadsToUse;
         if (options.getRps() > 0 && rps == 0) {
             // Eg 10 threads, 5 rps would give 0
@@ -552,8 +576,8 @@ public class ClusterComparator {
                             options.getPathOptions(), cluster1index, cluster2index);
                 }
                 else {
-                    Record record1 = client1.isLocal() ? recordSet1.getRecord() : client1.get(null, key1);
-                    Record record2 = client2.isLocal() ? recordSet2.getRecord() : client2.get(null, key2);
+                    Record record1 = client1.isLocal() ? recordSet1.getRecord() : client1.get(tolerantReadPolicy, key1);
+                    Record record2 = client2.isLocal() ? recordSet2.getRecord() : client2.get(tolerantReadPolicy, key2);
                     compareResult = comparator.compare(key1, record1, record2,
                             options.getPathOptions(), false, cluster1index, cluster2index);
                 }
@@ -645,7 +669,25 @@ public class ClusterComparator {
                         }
                     }
                     if (!done) {
-                        comparePartition(clients, namespace, setName, partitionId);
+                        try {
+                            comparePartition(clients, namespace, setName, partitionId);
+                        }
+                        catch (Exception e) {
+                            // When a partition fails, it is unexpected as the retries
+                            // have been set up to be very tolerant of timeouts, etc. 
+                            // It would be possible to retry the partition by pushing it
+                            // back onto the <code>partitionList</code> but then there is 
+                            // a chance of infinite errors. Instead just flag it as an issue.
+                            if (!options.isSilent()) {
+                                System.out.printf("ERROR: Worker thread encountered an error scanning partition %d which prevented it from completing "
+                                        + "the scan of the partition. The error encountered was %s (%s)\n", 
+                                        partitionId, e.getMessage(), e.getClass());
+                                e.printStackTrace();
+                            }
+                            synchronized (failedPartitionsList) {
+                                failedPartitionsList.add(partitionId);
+                            }
+                        }
                     }
                 }
             }
@@ -665,7 +707,7 @@ public class ClusterComparator {
                 }
                 else {
                     Key namespaceResolvedKey = new Key(options.getNamespaceName(key.namespace, i), key.digest, key.setName, key.userKey);
-                    recordMetadatas[i] = clients[i].getMetadata(null, namespaceResolvedKey);
+                    recordMetadatas[i] = clients[i].getMetadata(tolerantWritePolicy, namespaceResolvedKey);
                 }
             }
         }
@@ -704,7 +746,7 @@ public class ClusterComparator {
                         List<Integer> clientsWithoutRecord = new ArrayList<>();
                         forEachCluster((i, c) -> {
                             Key namespaceResolvedKey = line.getKey(i);
-                            if (clients[i].exists(null, namespaceResolvedKey)) {
+                            if (clients[i].exists(tolerantReadPolicy, namespaceResolvedKey)) {
                                 clientsWithRecord.add(i);
                             }
                             else {
@@ -723,7 +765,7 @@ public class ClusterComparator {
                         List<Integer> clustersWithoutRecord = new ArrayList<>();
                         for (int i = 0; i < clients.length; i++) {
                             Key namespaceResolvedKey = line.getKey(i);
-                            records[i] = clients[i].get(null, namespaceResolvedKey);
+                            records[i] = clients[i].get(tolerantReadPolicy, namespaceResolvedKey);
                             if (records[i] == null) {
                                 clustersWithoutRecord.add(i);
                             }
@@ -856,6 +898,47 @@ public class ClusterComparator {
         }
     }
     
+    private void showSummary() {
+        if (!options.isSilent()) {
+            if (options.isRecordLevelCompare()) {
+                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i+1, this.recordsMissingOnCluster.get(i)));
+                System.out.printf("Records different         : %,d\n"
+                                + "Records compared          : %,d\n", 
+                        this.recordsDifferentCount.get(), this.totalRecordsCompared.get());
+            }
+            else {
+                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i+1, this.recordsMissingOnCluster.get(i)));
+            }
+            if (this.forceTerminate) {
+                if (this.totalMissingRecords.get() >= this.options.getMissingRecordsLimit()) {
+                    System.out.printf("Comparison terminated after finding %d missing records on a limit of %d\n", 
+                            this.totalMissingRecords.get(), this.options.getMissingRecordsLimit());
+                }
+                else if (this.totalRecordsCompared.get() >= this.options.getRecordCompareLimit()) {
+                    System.out.printf("Comparison terminated after comparing %d records on a limit of %d\n", 
+                            this.totalRecordsCompared.get(), this.options.getRecordCompareLimit());
+                }
+            }
+            if (!this.failedPartitionsList.isEmpty()) {
+                System.out.printf("******************************\n");
+                System.out.printf("*                            *\n");
+                System.out.printf("* WARNING: Failed Partitions *\n");
+                System.out.printf("*                            *\n");
+                System.out.printf("******************************\n");
+                System.out.printf("Some partitions failed to successfully complete the scan. It is recommended that they "
+                        + "be rescanned. This can be done by repeating this run and using the following flag:\n");
+                System.out.printf("    --partitionList ");
+                for (int i = 0; i < this.failedPartitionsList.size(); i++) {
+                    if (i > 0) {
+                        System.out.print(",");
+                    }
+                    System.out.printf("%d", failedPartitionsList.get(i));
+                }
+                System.out.println();
+            }
+        }
+    }
+    
     private void monitorProgress(String namespace, String setName) throws InterruptedException {
         if (!options.isSilent()) {
             if (options.getAction().needsInputFile() ) {
@@ -902,32 +985,12 @@ public class ClusterComparator {
         }
         this.executor.awaitTermination(7, TimeUnit.DAYS);
         
-        if (!options.isSilent()) {
-            if (options.isRecordLevelCompare()) {
-                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i+1, this.recordsMissingOnCluster.get(i)));
-                System.out.printf("Records different         : %,d\n"
-                                + "Records compared          : %,d\n", 
-                        this.recordsDifferentCount.get(), this.totalRecordsCompared.get());
-            }
-            else {
-                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i+1, this.recordsMissingOnCluster.get(i)));
-            }
-            if (this.forceTerminate) {
-                if (this.totalMissingRecords.get() >= this.options.getMissingRecordsLimit()) {
-                    System.out.printf("Comparison terminated after finding %d missing records on a limit of %d\n", 
-                            this.totalMissingRecords.get(), this.options.getMissingRecordsLimit());
-                }
-                else if (this.totalRecordsCompared.get() >= this.options.getRecordCompareLimit()) {
-                    System.out.printf("Comparison terminated after comparing %d records on a limit of %d\n", 
-                            this.totalRecordsCompared.get(), this.options.getRecordCompareLimit());
-                }
-            }
-        }
+        showSummary();
     }
     
     private void touchRecord(AerospikeClientAccess client, Key key) {
         try {
-            client.touch(null, key);
+            client.touch(tolerantWritePolicy, key);
             if (!options.isSilent()) {
                 System.out.println("Touching record " + key);
             }
@@ -941,7 +1004,7 @@ public class ClusterComparator {
 
     private void readRecord(AerospikeClientAccess client, Key key) {
         try {
-            client.get(null, key);
+            client.get(tolerantReadPolicy, key);
             if (!options.isSilent()) {
                 System.out.println("Reading record " + key);
             }

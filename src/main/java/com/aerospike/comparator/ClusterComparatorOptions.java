@@ -308,7 +308,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         String syntax = ClusterComparator.class.getName() + " [<options>]";
-        formatter.printHelp(pw, 100, syntax, "options:", options, 0, 2, null);
+        formatter.printHelp(pw, 140, syntax, "options:", options, 0, 2, null);
         System.out.println(sw.toString());
         System.exit(1);
     }
