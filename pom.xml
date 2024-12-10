@@ -7,7 +7,7 @@
   <description>Find differences between different Aerospike clusters.</description>
   
 	<properties>
-		<aerospike-client.verion>6.0.0</aerospike-client.verion>
+		<aerospike-client.verion>7.2.1</aerospike-client.verion>
   		<jackson-dataformat-yaml.version>2.14.2</jackson-dataformat-yaml.version>
 		<junit-jupiter.version>5.9.2</junit-jupiter.version>
 		<commons-cli.version>1.4</commons-cli.version>

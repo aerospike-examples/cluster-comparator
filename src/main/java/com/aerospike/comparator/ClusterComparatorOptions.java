@@ -13,6 +13,7 @@ import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
+import org.apache.commons.cli.UnrecognizedOptionException;
 
 import com.aerospike.client.policy.AuthMode;
 import com.aerospike.client.policy.TlsPolicy;
@@ -491,7 +492,14 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     public ClusterComparatorOptions(String[] arguments) throws Exception {
         Options options = formOptions();
         CommandLineParser parser = new DefaultParser();
-        CommandLine cl = parser.parse(options, arguments, true);
+        CommandLine cl = null;
+        try {
+            cl = parser.parse(options, arguments, false);
+        }
+        catch (UnrecognizedOptionException uoe) {
+            System.out.println("Unrecognized option: " + uoe.getOption());
+            usage(options);
+        }
         
         if (cl.hasOption("usage")) {
             usage(options);
