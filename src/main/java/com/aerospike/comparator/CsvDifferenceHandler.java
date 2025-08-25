@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 
 import com.aerospike.client.Key;
 import com.aerospike.client.command.Buffer;
+import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 import com.aerospike.comparator.DifferenceCollection.RecordDifferences;
 import com.aerospike.comparator.dbaccess.RecordMetadata;
 
@@ -68,12 +69,21 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
     }
     
     @Override
-    public synchronized void handle(int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] metadatas) throws IOException {
+    public synchronized void handle(CompareMode compareMode, int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] metadatas) throws IOException {
         // If there are record level differences and binsOnly = true, the differences will be output in the record level handling phase.
         if (!hasRecordLevelDifferences || !options.isBinsOnly()) {
             String missingClusters = missingFromClusters.stream().map(id->options.clusterIdToName(id)).collect(Collectors.toList()).toString();
-            String humanlyReadable = "Missing from clusters: " + missingClusters;
-            String json = "{\"MISSING\":" + missingClusters + "}";
+            
+            String json;
+            String humanlyReadable;
+            if (compareMode == CompareMode.FIND_OVERLAP) {
+                humanlyReadable = "Overlapping on clusters: " + missingClusters;
+                json = "{\"OVERLAPPING\":" + missingClusters + "}";
+            }
+            else {
+                humanlyReadable = "Missing from clusters: " + missingClusters;
+                json = "{\"MISSING\":" + missingClusters + "}";
+            }
             writeDifference(partitionId, key, missingFromClusters, metadatas, json, humanlyReadable);
         }
     }

@@ -91,7 +91,7 @@ public class ClusterComparator {
         }
         
         @Override
-        public void handle(int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] recordMetadatas) throws IOException {
+        public void handle(CompareMode compareMode, int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] recordMetadatas) throws IOException {
             for (int thisCluster : missingFromClusters ) {
                 recordsMissingOnCluster.incrementAndGet(thisCluster);
             }
@@ -376,7 +376,12 @@ public class ClusterComparator {
         }
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
             try {
-                thisHandler.handle(partitionId, keyMissing, clustersWithoutRecord, hasRecordLevelDifferences, recordMetadatas);
+                if (options.getCompareMode() == CompareMode.FIND_OVERLAP) {
+                    thisHandler.handle(options.getCompareMode(), partitionId, keyMissing, clustersWithRecord, hasRecordLevelDifferences, recordMetadatas);
+                }
+                else {
+                    thisHandler.handle(options.getCompareMode(), partitionId, keyMissing, clustersWithoutRecord, hasRecordLevelDifferences, recordMetadatas);
+                }
             }
             catch (Exception e) {
                 System.err.printf("Error in %s: %s\n", thisHandler.getClass().getSimpleName(), e.getMessage());
@@ -432,6 +437,17 @@ public class ClusterComparator {
             }
         }
         return false;
+    }
+    
+    private boolean atMostOneSideValid(boolean[] sidesValid) {
+        int count = 0;
+        for (boolean isValid: sidesValid) {
+            if (isValid) {
+                count++;
+            }
+        }
+        return count <= 1;
+        
     }
     
     private Key getKeyWithLargestDigest(Key[] keys) {
@@ -531,16 +547,26 @@ public class ClusterComparator {
                         clustersWithoutRecord.add(i);
                     }
                 }
-                boolean hasRecordLevelDifferences = false;
-                // Need to compare the records with the maximum digest
-                if (options.isRecordLevelCompare()) {
-                    DifferenceCollection result = compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys);
-                    hasRecordLevelDifferences = result.hasDifferences();
+                if (options.getCompareMode() == CompareMode.FIND_OVERLAP) {
+                    if (clustersWithMaxDigest.size() > 1) {
+                        missingRecord(clients, clustersWithMaxDigest, clustersWithoutRecord, false, partitionId, keyWithLargestDigest);
+                    }
+                    if (atMostOneSideValid(sidesValid)) {
+                        // There's only one side left, so there's definitely no more overlap
+                        return;
+                    }
                 }
-                if (!clustersWithoutRecord.isEmpty())  {
-                    missingRecord(clients, clustersWithMaxDigest, clustersWithoutRecord, hasRecordLevelDifferences, partitionId, keyWithLargestDigest);
+                else {
+                    boolean hasRecordLevelDifferences = false;
+                    // Need to compare the records with the maximum digest
+                    if (options.isRecordLevelCompare()) {
+                        DifferenceCollection result = compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys);
+                        hasRecordLevelDifferences = result.hasDifferences();
+                    }
+                    if (!clustersWithoutRecord.isEmpty())  {
+                        missingRecord(clients, clustersWithMaxDigest, clustersWithoutRecord, hasRecordLevelDifferences, partitionId, keyWithLargestDigest);
+                    }
                 }
-
                 for (int cluster : clustersWithMaxDigest) {
                     sidesValid[cluster] = getNextRecord(recordSets[cluster], cluster);
                 }
@@ -907,7 +933,8 @@ public class ClusterComparator {
                         this.recordsDifferentCount.get(), this.totalRecordsCompared.get());
             }
             else {
-                forEachCluster((i, c) -> System.out.printf("Missing records on side %d : %,d\n", i+1, this.recordsMissingOnCluster.get(i)));
+                String title = options.getCompareMode() == CompareMode.FIND_OVERLAP ? "Overlapping" : "Missing";
+                forEachCluster((i, c) -> System.out.printf("%s records on side %d : %,d\n", title, i+1, this.recordsMissingOnCluster.get(i)));
             }
             if (this.forceTerminate) {
                 if (this.totalMissingRecords.get() >= this.options.getMissingRecordsLimit()) {

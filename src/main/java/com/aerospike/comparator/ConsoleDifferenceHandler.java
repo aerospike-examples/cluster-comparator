@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 import com.aerospike.client.Key;
 import com.aerospike.client.command.Buffer;
+import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
 import com.aerospike.comparator.dbaccess.RecordMetadata;
 
 public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDifferenceHandler {
@@ -15,7 +16,7 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
     }
     
     @Override
-    public void handle(int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] recordMetadatas) throws IOException {
+    public void handle(CompareMode compareMode, int partitionId, Key key, List<Integer> missingFromClusters, boolean hasRecordLevelDifferences, RecordMetadata[] recordMetadatas) throws IOException {
         String recordMetadataDesc = "";
         if (recordMetadatas != null) {
             StringBuilder sb = new StringBuilder();
@@ -35,8 +36,14 @@ public class ConsoleDifferenceHandler implements MissingRecordHandler, RecordDif
             }
             recordMetadataDesc = sb.toString();
         }
-        System.out.printf("MISSING RECORD:(%s,%s,%s,%s) Missing from clusters %s%s\n",key.namespace,key.setName, key.userKey, Buffer.bytesToHexString(key.digest), 
-                missingFromClusters.stream().map(i->i+1).collect(Collectors.toList()), recordMetadataDesc);
+        if (compareMode == CompareMode.FIND_OVERLAP) {
+            System.out.printf("OVERLAPPING RECORD:(%s,%s,%s,%s) Found on clusters %s%s\n", key.namespace,key.setName, key.userKey, Buffer.bytesToHexString(key.digest), 
+                    missingFromClusters.stream().map(i->i+1).collect(Collectors.toList()), recordMetadataDesc);
+        }
+        else {
+            System.out.printf("MISSING RECORD:(%s,%s,%s,%s) Missing from clusters %s%s\n", key.namespace,key.setName, key.userKey, Buffer.bytesToHexString(key.digest), 
+                    missingFromClusters.stream().map(i->i+1).collect(Collectors.toList()), recordMetadataDesc);
+        }
     }
 
     @Override

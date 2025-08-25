@@ -9,6 +9,8 @@ There are lots of options which can control how it does this, and how it handles
 * **MISSING_RECORDS**: Identifies if the clusters have identical records, and if not which records are missing from which clusters.
 * **RECORDS_DIFFERENT**: Identifies missing records from all clusters as with MISSING_RECORDS, but also compares record contents to ensure the contents of the records are identical. This mode will detect if the records are different but not show all the differences. The first difference will be output to the CSV file if this option has been selected.
 * **RECORD_DIFFERENCES**: Same as RECORDS_DIFFERENT but records all the differences between the records that it finds.
+* **FIND_OVERLAP**: The exact opposite of MISSING_RECORDS, this mode will find all records which are common between the clusters. This mode is useful for example if you want ensure you have non-overlapping mathematical sets of records which you want to merge together
+
 
 ## Architecture
 The comparator can run in two modes, depending on the visibiltiy of the clusters to the comparator node.
@@ -75,6 +77,11 @@ options:
                                  RECORD_DIFFERENCES -- Similar to RECORDS_DIFFERENT but will
                                  comprehensively inspect record pairs to determine the differences
                                  and show them.
+                                 FIND_OVERLAP -- The exact opposite of MISSING_RECORDS, this mode 
+                                 will find all records which are common between the clusters. This 
+                                 mode is useful for example if you want ensure you have non-overlapping 
+                                 mathematical sets of records which you want to merge together
+                                 
 -c,--console                     Output differences to the console. 'quiet' flag does not affect
                                  what is output. Can be used in conjunction with 'file' flag for
                                  dual output

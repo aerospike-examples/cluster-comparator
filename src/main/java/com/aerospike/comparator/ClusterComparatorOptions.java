@@ -55,7 +55,8 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         QUICK_NAMESPACE,
         MISSING_RECORDS,
         RECORDS_DIFFERENT,
-        RECORD_DIFFERENCES
+        RECORD_DIFFERENCES,
+        FIND_OVERLAP
     }
     
     private List<ClusterConfig> clusters = null;
@@ -212,7 +213,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 + "is fast but will not detect if the contents of the records are different.\n"
                 + "RECORDS_DIFFERENT -- Runs through all records and detects both missing records on either side and if record contents themselves are different. This will read all the records "
                 + "off the drives to be able to compare contents. This will only detect that records are different and not show the record differences\n"
-                + "RECORD_DIFFERENCES -- Similar to RECORDS_DIFFERENT but will comprehensively inspect record pairs to determine the differences and show them.");
+                + "RECORD_DIFFERENCES -- Similar to RECORDS_DIFFERENT but will comprehensively inspect record pairs to determine the differences and show them.\n"
+                + "FIND_OVERLAP -- The exact opposite of MISSING_RECORDS, this mode will find all records which are common between the clusters. This mode "
+                + "is useful for example if you want ensure you have non-overlapping mathematical sets of records which you want to merge together");
         options.addOption("u", "usage", false, "Display the usage and exit.");
         options.addOption("a", "action", true, "Action to take. Options are: 'scan' (scan for differences), 'touch' (touch the records specified in the file), 'read' (read the records in specified file), "
                 + ", 'scan_touch' (scan for differences, if any differences then automatically touch the records), 'scan_read' (scan for differences, if any differences then automatically read the record), "
