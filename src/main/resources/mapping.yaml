@@ -1,4 +1,7 @@
 ---
+network:
+  query:
+    socketTimeout: 20000
 namespaceMapping:
 - namespace: testSrc
   mappings:

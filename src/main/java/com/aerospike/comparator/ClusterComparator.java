@@ -80,9 +80,13 @@ public class ClusterComparator {
     private Expression filterExpresion = null;
     private final int numberOfClusters;
     
-    private final Policy tolerantReadPolicy = new Policy();
-    private final WritePolicy tolerantWritePolicy = new WritePolicy();
+//    private final Policy tolerantReadPolicy = new Policy();
+//    private final WritePolicy tolerantWritePolicy = new WritePolicy();
     
+    private QueryPolicy queryPolicyToUse;
+    private Policy readPolicyToUse;
+    private WritePolicy writePolicyToUse;
+
     private class InternalHandler implements MissingRecordHandler, RecordDifferenceHandler {
         private void checkDifferencesCount() {
             if (options.getMissingRecordsLimit() > 0 && (totalMissingRecords.get() + recordsDifferentCount.get() >= options.getMissingRecordsLimit())) {
@@ -105,7 +109,52 @@ public class ClusterComparator {
             checkDifferencesCount();
         }
     }
+    
+    private String showPolicy(Policy policy) {
+        if (policy == null) {
+            return "null";
+        }
+        StringBuffer sb = new StringBuffer()
+            .append(policy.getClass().getSimpleName())
+            .append("%n\t totalTimeout: ").append(policy.totalTimeout)
+            .append("%n\t sleepBetweenRetries: ").append(policy.sleepBetweenRetries)
+            .append("%n\t connectTimeout: ").append(policy.connectTimeout)
+            .append("%n\t maxRetries: ").append(policy.maxRetries)
+            .append("%n\t socketTimeout: ").append(policy.socketTimeout)
+            .append("%n\t timeoutDelay: ").append(policy.timeoutDelay);
         
+        if (policy instanceof QueryPolicy) {
+            QueryPolicy queryPolicy = (QueryPolicy)policy;
+            sb.append("%n\t recordQueueSize: ").append(queryPolicy.recordQueueSize)
+              .append("%n\t shortQuery: ").append(queryPolicy.shortQuery);
+              
+        }
+        return sb.toString();
+    }
+    /** 
+     * Set up default read, write and query policies, but allow them
+     * to be overridden by the config file in the network stanza.
+     * <p>
+     * This needs to be called once the config file has been parsed
+     * and before the connection to the server. The  settings will be set 
+     * on the client policy as the default, but NOT sent to the remote
+     * server.
+     */
+    private void setupPolicies() {
+        this.queryPolicyToUse = new QueryPolicy();
+        this.readPolicyToUse = new Policy();
+        this.writePolicyToUse = new WritePolicy();
+
+        if (this.options.getConfigOptions() != null) {
+            NetworkOptions network = options.getConfigOptions().getNetwork();
+            if (network != null) {
+                network.updateQueryPolicy(queryPolicyToUse);
+                network.updateReadPolicy(readPolicyToUse);
+                network.updateWritePolicy(writePolicyToUse);
+            }
+        }
+    }
+
     public ClusterComparator(ClusterComparatorOptions options) throws IOException {
         this.options = options;
         this.startPartition = Math.max(options.getStartPartition(), 0);
@@ -119,15 +168,7 @@ public class ClusterComparator {
         recordsProcessedOnCluster = new AtomicLongArray(numberOfClusters);
         recordsMissingOnCluster = new AtomicLongArray(numberOfClusters);
 
-        this.tolerantReadPolicy.totalTimeout = 5000;
-        this.tolerantReadPolicy.socketTimeout = 200;
-        this.tolerantReadPolicy.maxRetries = 25;
-        this.tolerantReadPolicy.sleepBetweenRetries = 500;
-        
-        this.tolerantWritePolicy.totalTimeout = 5000;
-        this.tolerantWritePolicy.socketTimeout = 200;
-        this.tolerantWritePolicy.maxRetries = 25;
-        this.tolerantWritePolicy.sleepBetweenRetries = 500;
+        this.setupPolicies();
         
         InternalHandler handler = new InternalHandler();
         this.missingRecordHandlers.add(handler);
@@ -213,6 +254,10 @@ public class ClusterComparator {
         clientPolicy.useServicesAlternate = config.isUseServicesAlternate();
         clientPolicy.minConnsPerNode = this.threadsToUse;
 
+        clientPolicy.readPolicyDefault = readPolicyToUse;
+        clientPolicy.queryPolicyDefault = queryPolicyToUse;
+        clientPolicy.writePolicyDefault = writePolicyToUse;
+        
         String hostNames = config.getHostName();
         if (hostNames.startsWith("remote:")) {
             // Ignore any addresses after the first
@@ -473,17 +518,11 @@ public class ClusterComparator {
     }
     
     private void comparePartition(AerospikeClientAccess[] clients, String namespace, String setName, int partitionId) {
-        QueryPolicy queryPolicy = new QueryPolicy();
+        QueryPolicy queryPolicy = new QueryPolicy(queryPolicyToUse);
         queryPolicy.maxConcurrentNodes = 1;
         queryPolicy.includeBinData = options.isRecordLevelCompare();
         queryPolicy.shortQuery = false;
         queryPolicy.filterExp = this.filterExpresion;
-        
-        // Set long timeouts and retries to allow for servers to fail and partition ownership to move over
-        queryPolicy.totalTimeout = 30000;
-        queryPolicy.sleepBetweenRetries = 2000;
-        queryPolicy.maxRetries = 10;
-        queryPolicy.socketTimeout = 2000;
         
         int rps = options.getRps()/this.threadsToUse;
         if (options.getRps() > 0 && rps == 0) {
@@ -602,8 +641,8 @@ public class ClusterComparator {
                             options.getPathOptions(), cluster1index, cluster2index);
                 }
                 else {
-                    Record record1 = client1.isLocal() ? recordSet1.getRecord() : client1.get(tolerantReadPolicy, key1);
-                    Record record2 = client2.isLocal() ? recordSet2.getRecord() : client2.get(tolerantReadPolicy, key2);
+                    Record record1 = client1.isLocal() ? recordSet1.getRecord() : client1.get(readPolicyToUse, key1);
+                    Record record2 = client2.isLocal() ? recordSet2.getRecord() : client2.get(readPolicyToUse, key2);
                     compareResult = comparator.compare(key1, record1, record2,
                             options.getPathOptions(), false, cluster1index, cluster2index);
                 }
@@ -733,7 +772,7 @@ public class ClusterComparator {
                 }
                 else {
                     Key namespaceResolvedKey = new Key(options.getNamespaceName(key.namespace, i), key.digest, key.setName, key.userKey);
-                    recordMetadatas[i] = clients[i].getMetadata(tolerantWritePolicy, namespaceResolvedKey);
+                    recordMetadatas[i] = clients[i].getMetadata(writePolicyToUse, namespaceResolvedKey);
                 }
             }
         }
@@ -772,7 +811,7 @@ public class ClusterComparator {
                         List<Integer> clientsWithoutRecord = new ArrayList<>();
                         forEachCluster((i, c) -> {
                             Key namespaceResolvedKey = line.getKey(i);
-                            if (clients[i].exists(tolerantReadPolicy, namespaceResolvedKey)) {
+                            if (clients[i].exists(readPolicyToUse, namespaceResolvedKey)) {
                                 clientsWithRecord.add(i);
                             }
                             else {
@@ -791,7 +830,7 @@ public class ClusterComparator {
                         List<Integer> clustersWithoutRecord = new ArrayList<>();
                         for (int i = 0; i < clients.length; i++) {
                             Key namespaceResolvedKey = line.getKey(i);
-                            records[i] = clients[i].get(tolerantReadPolicy, namespaceResolvedKey);
+                            records[i] = clients[i].get(readPolicyToUse, namespaceResolvedKey);
                             if (records[i] == null) {
                                 clustersWithoutRecord.add(i);
                             }
@@ -1017,7 +1056,7 @@ public class ClusterComparator {
     
     private void touchRecord(AerospikeClientAccess client, Key key) {
         try {
-            client.touch(tolerantWritePolicy, key);
+            client.touch(writePolicyToUse, key);
             if (!options.isSilent()) {
                 System.out.println("Touching record " + key);
             }
@@ -1031,7 +1070,7 @@ public class ClusterComparator {
 
     private void readRecord(AerospikeClientAccess client, Key key) {
         try {
-            client.get(tolerantReadPolicy, key);
+            client.get(readPolicyToUse, key);
             if (!options.isSilent()) {
                 System.out.println("Reading record " + key);
             }
@@ -1192,6 +1231,12 @@ public class ClusterComparator {
 
             Date now = new Date();
             System.out.printf("Run starting at %s (%d) with comparison mode %s\n", options.getDateFormat().format(now), now.getTime(), options.getCompareMode());
+
+            if (options.isVerbose()) {
+                System.out.printf("Read Policy: " + showPolicy(readPolicyToUse) + "%n");
+                System.out.printf("Write Policy: " + showPolicy(writePolicyToUse) + "%n");
+                System.out.printf("Query Policy: " + showPolicy(queryPolicyToUse) + "%n");
+            }
         }
     }
     

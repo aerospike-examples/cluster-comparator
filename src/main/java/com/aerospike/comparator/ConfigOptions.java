@@ -5,6 +5,7 @@ import java.util.List;
 public class ConfigOptions {
     private List<ClusterConfig> clusters;
     private List<NamespaceMapping> namespaceMapping;
+    private NetworkOptions network;
 
     public List<ClusterConfig> getClusters() {
         return clusters;
@@ -20,6 +21,14 @@ public class ConfigOptions {
 
     public void setNamespaceMapping(List<NamespaceMapping> namespaceMapping) {
         this.namespaceMapping = namespaceMapping;
+    }
+    
+    public NetworkOptions getNetwork() {
+        return network;
+    }
+    
+    public void setNetwork(NetworkOptions network) {
+        this.network = network;
     }
     
     @Override
