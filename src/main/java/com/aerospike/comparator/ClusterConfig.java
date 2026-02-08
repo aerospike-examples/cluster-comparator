@@ -1,6 +1,5 @@
 package com.aerospike.comparator;
 
-import com.aerospike.client.lua.LuaStreamLib.tostring;
 import com.aerospike.client.policy.AuthMode;
 
 public class ClusterConfig {
@@ -8,7 +7,7 @@ public class ClusterConfig {
     private String clusterName;
     private String userName;
     private String password;
-    private AuthMode authMode;
+    private AuthMode authMode = AuthMode.INTERNAL;
     private TlsOptions tls;
     private boolean useServicesAlternate;
     public String getHostName() {

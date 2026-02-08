@@ -44,33 +44,57 @@ public class SSLOptions {
         this.keyPassword = keyPassword;
     }
     
-    public SSLFactory toSSLFactory() {
+    public SSLFactory toSSLFactory(boolean doLogging) {
         InputStream certFile = null;
         InputStream keyFile = null;
         InputStream caFile = null;
         try {
-            try {
-                certFile = new FileInputStream(new File(certChain));
-            } catch (FileNotFoundException e) {
-                throw new AerospikeException(String.format("certChain file '%s' not found", certChain));
+            if (certChain != null) {
+                try {
+                    if (doLogging) {
+                        System.out.printf("using certChain file: %s\n", certChain);
+                    }
+                    certFile = new FileInputStream(new File(certChain));
+                } catch (FileNotFoundException e) {
+                    throw new AerospikeException(String.format("certChain file '%s' not found", certChain));
+                }
             }
-            try {
-                keyFile = new FileInputStream(new File(privateKey));
-            } catch (FileNotFoundException e) {
-                throw new AerospikeException(String.format("privateKey file '%s' not found", certChain));
+            if (privateKey != null) {
+                try {
+                    if (doLogging) {
+                        System.out.printf("Using key file: %s\n", privateKey);
+                    }
+                    keyFile = new FileInputStream(new File(privateKey));
+                } catch (FileNotFoundException e) {
+                    throw new AerospikeException(String.format("privateKey file '%s' not found", privateKey));
+                }
             }
-            try {
-                caFile = new FileInputStream(new File(caCertChain));
-            } catch (FileNotFoundException e) {
-                throw new AerospikeException(String.format("caCertChain file '%s' not found", certChain));
+            if (caCertChain != null) {
+                try {
+                    if (doLogging) {
+                        System.out.printf("Using caCertChain file: %s\n", caCertChain);
+                    }
+                    caFile = new FileInputStream(new File(caCertChain));
+                } catch (FileNotFoundException e) {
+                    throw new AerospikeException(String.format("caCertChain file '%s' not found", caCertChain));
+                }
             }
-            X509ExtendedKeyManager keyManager = PemUtils.loadIdentityMaterial(certFile, keyFile, keyPassword == null ? null : keyPassword.toCharArray());
+            
+            SSLFactory sslFactory;
             X509ExtendedTrustManager trustManager = PemUtils.loadTrustMaterial(caFile);
+            if (certFile != null || keyFile != null) {
+                X509ExtendedKeyManager keyManager= PemUtils.loadIdentityMaterial(certFile, keyFile, keyPassword == null ? null : keyPassword.toCharArray());
+                sslFactory = SSLFactory.builder()
+                        .withIdentityMaterial(keyManager)
+                        .withTrustMaterial(trustManager)
+                        .build();
+            }
+            else {
+                sslFactory = SSLFactory.builder()
+                        .withTrustMaterial(trustManager)
+                        .build();
+            }
     
-            SSLFactory sslFactory = SSLFactory.builder()
-                    .withIdentityMaterial(keyManager)
-                    .withTrustMaterial(trustManager)
-                    .build();
             return sslFactory;
         }
         finally {

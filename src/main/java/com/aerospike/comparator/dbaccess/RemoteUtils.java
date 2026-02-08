@@ -27,6 +27,7 @@ import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.command.ParticleType;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.Replica;
+import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.comparator.AerospikeComparator;
 
 import gnu.crypto.hash.RipeMD160;
@@ -101,6 +102,12 @@ public class RemoteUtils {
             dos.writeInt(policy.totalTimeout);
             dos.writeBoolean(policy.sendKey);
             dos.writeUTF(policy.replica == null ? "" : policy.replica.toString());
+            if (policy instanceof WritePolicy) {
+                dos.writeBoolean(((WritePolicy)policy).durableDelete);
+            }
+            else {
+                dos.writeBoolean(false);
+            }
         }
     }
     
@@ -117,6 +124,10 @@ public class RemoteUtils {
             policyToChange.sendKey = dis.readBoolean();
             String replica = dis.readUTF();
             policyToChange.replica = replica == null || replica.length() == 0 ? null : Replica.valueOf(replica);
+            boolean durableDelete = dis.readBoolean();
+            if (policyToChange instanceof WritePolicy) {
+                ((WritePolicy)policyToChange).durableDelete = durableDelete;
+            }
             return policyToChange;
         }
     }

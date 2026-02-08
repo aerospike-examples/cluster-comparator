@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -15,6 +16,7 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,6 +45,7 @@ import com.aerospike.client.query.PartitionFilter;
 import com.aerospike.client.query.Statement;
 import com.aerospike.comparator.ClusterComparatorOptions.Action;
 import com.aerospike.comparator.ClusterComparatorOptions.CompareMode;
+import com.aerospike.comparator.ClusterComparatorOptions.CustomActions;
 import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
 import com.aerospike.comparator.dbaccess.LocalAerospikeClient;
 import com.aerospike.comparator.dbaccess.RecordMetadata;
@@ -53,7 +56,6 @@ import com.aerospike.comparator.dbaccess.RemoteServer;
 public class ClusterComparator {
 
     // TODO:
-    // - config file to remove certain bins from comparison of sets
     // - Protobuf'ing binary fields
     // - Or msgpack
     // - Ability to compare different sets (scan/batch comparator) Note: how to ensure it's not just a one-way comparison?
@@ -86,6 +88,8 @@ public class ClusterComparator {
     private QueryPolicy queryPolicyToUse;
     private Policy readPolicyToUse;
     private WritePolicy writePolicyToUse;
+    private boolean hasDoneFirstDelete = false;
+    private AtomicBoolean hasChallengeActive = new AtomicBoolean(false);
 
     private class InternalHandler implements MissingRecordHandler, RecordDifferenceHandler {
         private void checkDifferencesCount() {
@@ -178,7 +182,10 @@ public class ClusterComparator {
             this.missingRecordHandlers.add(consoleHandler);
             this.recordDifferenceHandlers.add(consoleHandler);
         }
-        if (options.getOutputFileName() != null && options.getAction() != Action.TOUCH && options.getAction() != Action.READ ) {
+        if (options.getOutputFileName() != null && 
+                options.getAction() != Action.TOUCH && 
+                options.getAction() != Action.READ && 
+                options.getAction() != Action.CUSTOM) {
             CsvDifferenceHandler csvHandler = new CsvDifferenceHandler(options.getOutputFileName(), options);
             this.missingRecordHandlers.add(csvHandler);
             this.recordDifferenceHandlers.add(csvHandler);
@@ -238,7 +245,8 @@ public class ClusterComparator {
                     policy.protocols == null ? "null" : "[" + String.join(",", policy.protocols) + "]",
                     policy.ciphers == null ? "null" : "[" + String.join(",", policy.ciphers) + "]",
                     policy.revokeCertificates == null ? "null" : "[" + policy.revokeCertificates.length + " items]",
-                    policy.forLoginOnly
+                    policy.forLoginOnly,
+                    policy.context
                 );
         }
     }
@@ -248,7 +256,7 @@ public class ClusterComparator {
         
         clientPolicy.user = config.getUserName();
         clientPolicy.password = config.getPassword();
-        clientPolicy.tlsPolicy = config.getTls() == null ? null : config.getTls().toTlsPolicy();
+        clientPolicy.tlsPolicy = config.getTls() == null ? null : config.getTls().toTlsPolicy(options.isDebug());
         clientPolicy.authMode = config.getAuthMode();
         clientPolicy.clusterName = config.getClusterName();
         clientPolicy.useServicesAlternate = config.isUseServicesAlternate();
@@ -438,6 +446,11 @@ public class ClusterComparator {
         if (this.options.getAction() == Action.SCAN_TOUCH) {
             for (Integer thisCluster : clustersWithRecord) {
                 touchRecord(clients[thisCluster], keyMissing);
+            }
+        }
+        if (this.options.getAction() == Action.SCAN_CUSTOM) {
+            for (Integer thisCluster : clustersWithRecord) {
+                customRecordAction(clients[thisCluster], keyMissing, thisCluster);
             }
         }
         if (this.options.getAction() == Action.SCAN_READ) {
@@ -1032,7 +1045,7 @@ public class ClusterComparator {
             int activeThreads = this.activeThreads.get();
             long now = System.currentTimeMillis();
             long elapsedMilliseconds = now - startTime;
-            if (!options.isSilent()) {
+            if (!options.isSilent() && !hasChallengeActive.get()) {
                 if (options.getAction() != Action.RERUN) {
                     System.out.printf("%,dms: [%d-%d, remaining %d, complete:%s], active threads: %d, records processed: {",
                             (now-startTime), this.startPartition, this.endPartition, nextPartition, getPartitionsComplete(), activeThreads);
@@ -1081,6 +1094,67 @@ public class ClusterComparator {
             ae.printStackTrace();
         }
     }
+    
+    private String getChallengeString(int length) {
+        StringBuffer sb = new StringBuffer();
+        for (int i = 0; i < length; i++) {
+            sb.append((char)('a' + ThreadLocalRandom.current().nextInt(26)));
+        }
+        return sb.toString();
+    }
+    
+    private void customRecordAction(AerospikeClientAccess client, Key key, int clusterOrdinal) {
+        CustomActions action = CustomActions.NONE;
+        try {
+            action = options.getCustomActions().get(clusterOrdinal);
+            if (action == null) {
+                return;
+            }
+            Scanner input;
+            switch (action) {
+            case TOUCH:
+                client.touch(writePolicyToUse, key);
+                if (!options.isSilent()) {
+                    System.out.printf("Touching record %s on cluster %d\n", key, clusterOrdinal+1);
+                }
+                break;
+                
+            case DELETE:
+            case DELETE_DURABLY:
+                if (!hasDoneFirstDelete && !options.isSkipChallenge()) {
+                    hasChallengeActive.set(true);
+                    String challenge = getChallengeString(6);
+                    System.out.printf("WARNING: Records will be deleted from one or more clusters! "
+                            + "If you are SURE you want to do this, type the following below: %s\n", challenge);
+                    input = new Scanner(System.in);
+                    String confirm = input.nextLine();
+                    if (!challenge.equals(confirm)) {
+                        hasChallengeActive.set(false);
+                        System.out.printf("Invalid response received. Expected '%s', received '%s'. Aborting run.\n", challenge, confirm);
+                        throw new IllegalStateException("Deletion validation challenge failed.");
+                    }
+                    hasDoneFirstDelete = true;
+                    hasChallengeActive.set(false);
+                }
+
+                writePolicyToUse.durableDelete = action == CustomActions.DELETE_DURABLY;
+                client.delete(writePolicyToUse, key);
+                if (!options.isSilent()) {
+                    System.out.printf("Deleting record %s on cluster %d\n", key, clusterOrdinal+1);
+                }
+                break;
+            case NONE:
+                // No action
+            }
+        }
+        catch (AerospikeException ae) {
+            System.out.printf("Error thrown when %s record. Error was %s, class %s\n", 
+                    action == CustomActions.TOUCH ? "touching" : "deleting",
+                    ae.getMessage(), ae.getClass().getCanonicalName());
+            System.out.printf("Key: %s\n", key);
+            ae.printStackTrace();
+        }
+    }
 
     private final FileLineProcessor TOUCH_RECORD_PROCESSOR = new FileLineProcessor() {
         @Override
@@ -1100,6 +1174,18 @@ public class ClusterComparator {
             forEachCluster((i, c) -> {
                 if (line.hasDigest(i)) {
                     readRecord(clients[i], line.getKey(i));
+                    return;
+                }
+            });
+        }
+    };
+    
+    private final FileLineProcessor CUSTOM_RECORD_PROCESSOR = new FileLineProcessor() {
+        @Override
+        public void process(AerospikeClientAccess[] clients, FileLine line) {
+            forEachCluster((i, c) -> {
+                if (line.hasDigest(i)) {
+                    customRecordAction(clients[i], line.getKey(i), i);
                     return;
                 }
             });
@@ -1260,10 +1346,13 @@ public class ClusterComparator {
             else if (options.getAction() == Action.READ) {
                 this.processRecords(clients, READ_RECORD_PROCESSOR, options.getInputFileName());
             }
+            else if (options.getAction() == Action.CUSTOM) {
+                this.processRecords(clients, CUSTOM_RECORD_PROCESSOR, options.getInputFileName());
+            }
             else {
                 this.performComparisons(clients);
                 if (options.getAction() == Action.SCAN_ASK && (totalMissingRecords.get() > 0 || recordsDifferentCount.get() > 0)) {
-                    System.out.printf("%,d differences found between the 2 clusters. Do you want those records to be touched, read or none? (t/r//N)", totalMissingRecords.get());
+                    System.out.printf("%,d differences found between the clusters. Do you want those records to be touched, read or none? (t/r//N)", totalMissingRecords.get());
                     input = new Scanner(System.in);
                     FileLineProcessor processor = null;
                     while (true) {

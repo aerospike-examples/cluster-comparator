@@ -41,193 +41,153 @@ Note that this method is designed for use where the visibility of the clusters i
 ```
 usage: com.aerospike.comparator.ClusterComparator [<options>]
 options:
--a,--action <arg>                Action to take. Options are: 'scan' (scan for differences), 'touch'
-                                 (touch the records specified in the file), 'read' (read the records
-                                 in specified file), , 'scan_touch' (scan for differences, if any
-                                 differences then automatically touch the records), 'scan_read'
-                                 (scan for differences, if any differences then automatically read
-                                 the record), 'scan_ask' (scan for differences, if any differences
-                                 then prompt the user, 'rerun' (read all the records from the
-                                 previous run and see if they're still different. Requires an input
-                                 file)as to whether to touch or read the records or not. Every
-                                 options besides 'scan' MUST specify the 'file' option too.
-                                 (Default: scan)
+-a,--action <arg>                Action to take. Options are: 'scan' (scan for differences), 'touch' (touch the records specified in the
+                                 file), 'read' (read the records in specified file), 'scan_touch' (scan for differences, if any differences
+                                 then automatically touch the records), 'scan_read' (scan for differences, if any differences then
+                                 automatically read the record), 'scan_ask' (scan for differences, if any differences then prompt the user,
+                                 'rerun' (read all the records from the previous run and see if they're still different. Requires an input
+                                 file) as to whether to touch or read the records or not, 'custom', allows a different action per cluster.
+                                 This option requires the 'customActions' parameter to be specified too. Every options besides 'scan' MUST
+                                 specify the 'file' option too. (Default: scan)
 -a1,--authMode1 <arg>            Set the auth mode of cluster1. Default: INTERNAL
 -a2,--authMode2 <arg>            Set the auth mode of cluster2. Default: INTERNAL
-   --binsOnly                    When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the
-                                 full differences, just the bin names which are different
+   --binsOnly                    When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the full differences, just the bin names
+                                 which are different
 -C,--compareMode <arg>           Determine which sort of comparison to use. The options are:
-                                 QUICK_NAMESPACE - Perform a quick (partition by partition count)
-                                 comparison of an entire namespace. Cannot be used if migrations are
-                                 going on or not all partitions are available. NOTE:This method
-                                 compares object counts at a partition level, so is not always
-                                 accurate. A partition which has record A on one side and record B
-                                 on the other side would compareas equal for example. Also, since
-                                 this compares partition by partition, comparison must be at the
-                                 namesapce level, not the set level.
-                                 MISSING_RECORDS (default) -- Check digests on both sides to find
-                                 missing records. Does not compare record contents and does not need
-                                 to read records off the drive. This is fast but will not detect if
-                                 the contents of the records are different.
-                                 RECORDS_DIFFERENT -- Runs through all records and detects both
-                                 missing records on either side and if record contents themselves
-                                 are different. This will read all the records off the drives to be
-                                 able to compare contents. This will only detect that records are
-                                 different and not show the record differences
-                                 RECORD_DIFFERENCES -- Similar to RECORDS_DIFFERENT but will
-                                 comprehensively inspect record pairs to determine the differences
-                                 and show them.
-                                 FIND_OVERLAP -- The exact opposite of MISSING_RECORDS, this mode 
-                                 will find all records which are common between the clusters. This 
-                                 mode is useful for example if you want ensure you have non-overlapping 
+                                 QUICK_NAMESPACE - Perform a quick (partition by partition count) comparison of an entire namespace. Cannot
+                                 be used if migrations are going on or not all partitions are available. NOTE:This method compares object
+                                 counts at a partition level, so is not always accurate. A partition which has record A on one side and
+                                 record B on the other side would compareas equal for example. Also, since this compares partition by
+                                 partition, comparison must be at the namesapce level, not the set level.
+                                 MISSING_RECORDS (default) -- Check digests on both sides to find missing records. Does not compare record
+                                 contents and does not need to read records off the drive. This is fast but will not detect if the contents
+                                 of the records are different.
+                                 RECORDS_DIFFERENT -- Runs through all records and detects both missing records on either side and if record
+                                 contents themselves are different. This will read all the records off the drives to be able to compare
+                                 contents. This will only detect that records are different and not show the record differences
+                                 RECORD_DIFFERENCES -- Similar to RECORDS_DIFFERENT but will comprehensively inspect record pairs to
+                                 determine the differences and show them.
+                                 FIND_OVERLAP -- The exact opposite of MISSING_RECORDS, this mode will find all records which are common
+                                 between the clusters. This mode is useful for example if you want ensure you have non-overlapping
                                  mathematical sets of records which you want to merge together
-                                 
--c,--console                     Output differences to the console. 'quiet' flag does not affect
-                                 what is output. Can be used in conjunction with 'file' flag for
-                                 dual output
+-c,--console                     Output differences to the console. 'quiet' flag does not affect what is output. Can be used in conjunction
+                                 with 'file' flag for dual output
 -cf,--configFile <arg>           YAML file with config options in it
 -cn1,--clusterName1 <arg>        Set the cluster name of cluster 1
 -cn2,--clusterName2 <arg>        Set the cluster name of cluster 2
--D,--debug                       Turn on debug mode. This will output a lot of information and
-                                 automatically turn on verbose mode and turn silent mode off
--db,--beginDate <arg>            Specify the begin date of the scan. Any records whose last update
-                                 time is this time or greater will be included in the scan. The
-                                 format of the date is by default yyyy/MM/dd-hh:mm:ssZ but can be
-                                 changed with -df flag. If the parameter is a just a number this
-                                 will be treated as the number of milliseconds since 1/1/1970. If
-                                 the end date is also specified, only records falling between the 2
-                                 dates will be scanned. Default: scan from the start of time.
--de,--endDate <arg>              Specify the end date of the scan. Any records whose last update
-                                 time is less than or equal to this time will be included in the
-                                 scan. The format of the date is by default yyyy/MM/dd-hh:mm:ssZ but
-                                 can be changed with -df flag. If the parameter is a just a number
-                                 this will be treated as the number of milliseconds since 1/1/1970.
-                                 If the start date is also specified, only records falling between
-                                 the 2 dates will be scanned. Default: scan until the end of time.
--df,--dateFormat <arg>           Format used to convert the dates passed with the -db and -de flags.
-                                 Should conform to the spec of SimpleDateFormat.
--E,--endPartition <arg>          Partition to end the comparison at. The comparsion will not include
-                                 this partition. (Default: 4096)
--f,--file <arg>                  Path to a CSV file. If a comparison is run, this file will be
-                                 overwritten if present.
--h1,--hosts1 <arg>               List of seed hosts for first cluster in format:
-                                 hostname1[:tlsname][:port1],...
-                                 The tlsname is only used when connecting with a secure TLS enabled
-                                 server. If the port is not specified, the default port is used.
-                                 IPv6 addresses must be enclosed in square brackets.
+   --customActions <arg>         Specify the action to take on each difference in the output file per cluster, rather than one global
+                                 action. This parameter is only valid with the 'action' flagset to 'custom'. This only applies to the
+                                 records in the output of a 'scan' action, and cannot be used while scanning.
+                                 Actions must be specified in the format '<clusterId>:<action>', with multiple options separated by a comma.
+                                 Cluster ids can specified as ordinal number (1-based, not 0-based),or cluster names.
+                                 Valid options are:
+                                 TOUCH - If the record exists on this cluster, touch the record.
+                                 NONE - perform no action. This is the default
+                                 DELETE - If the record exists on this cluster, delete the record from this cluster. Note: this parameter is
+                                 EXTREMELY DANGEROUS. Not only will the record be deleted from the local cluster, but since XDR propegates
+                                 deletes by default, the record will be deleted from any clusters this customer forwards to.
+                                 DURABLE_DELETE - Same as DELETE, but use durable deletes instead.
+                                 Examples:
+                                 -a custom --customActions 1:delete         (any records found on cluster one, remove them)
+                                 -a custom --customActions 1:touch,2:delete (touch records on cluster 1, delete them on cluster 2
+-D,--debug                       Turn on debug mode. This will output a lot of information and automatically turn on verbose mode and turn
+                                 silent mode off
+-db,--beginDate <arg>            Specify the begin date of the scan. Any records whose last update time is this time or greater will be
+                                 included in the scan. The format of the date is by default yyyy/MM/dd-hh:mm:ssZ but can be changed with -df
+                                 flag. If the parameter is a just a number this will be treated as the number of milliseconds since
+                                 1/1/1970. If the end date is also specified, only records falling between the 2 dates will be scanned.
+                                 Default: scan from the start of time.
+-de,--endDate <arg>              Specify the end date of the scan. Any records whose last update time is less than or equal to this time
+                                 will be included in the scan. The format of the date is by default yyyy/MM/dd-hh:mm:ssZ but can be changed
+                                 with -df flag. If the parameter is a just a number this will be treated as the number of milliseconds since
+                                 1/1/1970. If the start date is also specified, only records falling between the 2 dates will be scanned.
+                                 Default: scan until the end of time.
+-df,--dateFormat <arg>           Format used to convert the dates passed with the -db and -de flags. Should conform to the spec of
+                                 SimpleDateFormat.
+-E,--endPartition <arg>          Partition to end the comparison at. The comparsion will not include this partition. (Default: 4096)
+-f,--file <arg>                  Path to an output CSV file. If a comparison is run, this file will be overwritten if present.
+-h1,--hosts1 <arg>               List of seed hosts for first cluster in format: hostname1[:tlsname][:port1],...
+                                 The tlsname is only used when connecting with a secure TLS enabled server. If the port is not specified,
+                                 the default port is used. IPv6 addresses must be enclosed in square brackets.
                                  Default: localhost
                                  Examples:
                                  host1
                                  host1:3000,host2:3000
                                  192.168.1.10:cert1:3000,[2001::1111]:cert2:3000
--h2,--hosts2 <arg>               List of seed hosts for second cluster in format:
-                                 hostname1[:tlsname][:port1],...
-                                 The tlsname is only used when connecting with a secure TLS enabled
-                                 server. If the port is not specified, the default port is used.
-                                 IPv6 addresses must be enclosed in square brackets.
+-h2,--hosts2 <arg>               List of seed hosts for second cluster in format: hostname1[:tlsname][:port1],...
+                                 The tlsname is only used when connecting with a secure TLS enabled server. If the port is not specified,
+                                 the default port is used. IPv6 addresses must be enclosed in square brackets.
                                  Default: localhost
                                  Examples:
                                  host1
                                  host1:3000,host2:3000
                                  192.168.1.10:cert1:3000,[2001::1111]:cert2:3000
--i,--inputFile <arg>             Specify an input file for records to compare. This is only used
-                                 with the RERUN, READ and TOUCH actions and is typically set to the
-                                 output file of a previous run.
--l,--limit <arg>                 Limit the number of differences to the passed value. Pass 0 for
-                                 unlimited. (Default: 0)
+-i,--inputFile <arg>             Specify an input file for records to compare. This is only used with the RERUN, READ and TOUCH actions and
+                                 is typically set to the output file of a previous run.
+-l,--limit <arg>                 Limit the number of differences to the passed value. Pass 0 for unlimited. (Default: 0)
 -m,--metadataCompare             Perform a meta-data comparison between the 2 clusters
--n,--namespaces <arg>            Namespaces to scan for differences. Multiple namespaces can be
-                                 specified in a comma-separated list. Must include at least one
-                                 namespace.
+-n,--namespaces <arg>            Namespaces to scan for differences. Multiple namespaces can be specified in a comma-separated list. Must
+                                 include at least one namespace.
 -P1,--password1 <arg>            Password for cluster 1
 -P2,--password2 <arg>            Password for cluster 2
--pf,--pathOptionsFile <arg>      YAML file used to contain path options. The options are used to
-                                 determine whether to ignore paths or compare list paths order
-                                 insensitive.
--pl,--partitionList <arg>        Specify a list of partitions to scan. If this argument is
-                                 specified, neither the beginPartition nor the endPartition argument
-                                 can be specified
+-pf,--pathOptionsFile <arg>      YAML file used to contain path options. The options are used to determine whether to ignore paths or
+                                 compare list paths order insensitive.
+-pl,--partitionList <arg>        Specify a list of partitions to scan. If this argument is specified, neither the beginPartition nor the
+                                 endPartition argument can be specified
 -q,--quiet                       Do not output spurious information like progress.
--r,--rps <arg>                   Limit requests per second on the cluster to this value. Use 0 for
-                                 unlimited. (Default: 0)
--rcs,--remoteCacheSize <arg>     When using a remote cache, set a buffer size to more efficiently
-                                 transfer records from the remote server to this comparator. Note
-                                 this parameter only has an effect if >= 4
--rl,--recordLimit <arg>          The maximum number of records to compare. Specify 0 for unlimited
-                                 records (default)
--rs,--remoteServer <arg>         This comparator instance is to be used as a remote server. That is,
-                                 its operations will be controlled by another comparator instance,
-                                 and they will communicate over a socket. Note that in this mode,
-                                 only host 1 is connected, any parameters associated with host 2
-                                 will be silently ignored. This is useful when there is no single
-                                 node which can see both clusters due to firewalls, NAT restrictions
-                                 etc. To connect to this remoteServer from the main comparator
-                                 specify a host address of 'remote:<this_host_ip>:<port>. The port
-                                 is specified as a parameter to this argument. If using TLS, the
-                                 -remoteServerTls parameter is also required for the server to get
-                                 the appropriate certificates.
-                                 This argument takes 1 or 2 parameters in the format
-                                 port,[heartbeatPort]. If the heartbeat port is specified, it is
-                                 non-TLS enabled and just accepts connections then echoes back any
-                                 characters received. It can only handle one heartbeat at a time.
--rsh,--remoteServerHashes <arg>  When using the remote server, send hashes for record comparison.
-                                 Default: true. Turning this to false might be more efficient if you
-                                 are finding record level differences and there are a lot of
-                                 mismatching records.
--rst,--remoteServerTls <arg>     TLS options for the remote server. Use the same format as -tls1,
-                                 but only the context is needed
+-r,--rps <arg>                   Limit requests per second on the cluster to this value. Use 0 for unlimited. (Default: 0)
+-rcs,--remoteCacheSize <arg>     When using a remote cache, set a buffer size to more efficiently transfer records from the remote server to
+                                 this comparator. Note this parameter only has an effect if >= 4
+-rl,--recordLimit <arg>          The maximum number of records to compare. Specify 0 for unlimited records (default)
+-rs,--remoteServer <arg>         This comparator instance is to be used as a remote server. That is, its operations will be controlled by
+                                 another comparator instance, and they will communicate over a socket. Note that in this mode, only host 1
+                                 is connected, any parameters associated with host 2 will be silently ignored. This is useful when there is
+                                 no single node which can see both clusters due to firewalls, NAT restrictions etc. To connect to this
+                                 remoteServer from the main comparator specify a host address of 'remote:<this_host_ip>:<port>. The port is
+                                 specified as a parameter to this argument. If using TLS, the -remoteServerTls parameter is also required
+                                 for the server to get the appropriate certificates.
+                                 This argument takes 1 or 2 parameters in the format port,[heartbeatPort]. If the heartbeat port is
+                                 specified, it is non-TLS enabled and just accepts connections then echoes back any characters received. It
+                                 can only handle one heartbeat at a time.
+-rsh,--remoteServerHashes <arg>  When using the remote server, send hashes for record comparison. Default: true. Turning this to false might
+                                 be more efficient if you are finding record level differences and there are a lot of mismatching records.
+-rst,--remoteServerTls <arg>     TLS options for the remote server. Use the same format as -tls1, but only the context is needed
 -S,--startPartition <arg>        Partition to start the comparison at. (Default: 0)
--s,--setNames <arg>              Set name to scan for differences. Multiple sets can be specified in
-                                 a comma-separated list. If not specified, all sets will be scanned.
+-s,--setNames <arg>              Set name to scan for differences. Multiple sets can be specified in a comma-separated list. If not
+                                 specified, all sets will be scanned.
 -sa1,--useServicesAlternate1     Use services alternative when connecting to cluster 1
 -sa2,--useServicesAlternate2     Use services alternative when connecting to cluster 2
-   --showMetadata                Output cluster metadata (Last update time, record size) on cluster
-                                 differernces. This will require an additional read which will
-                                 impact performance
--sm,--sortMaps <arg>             Sort maps. If using hashes to compare a local cluster with a remote
-                                 cluster and the order in the maps is different, the hashes will be
-                                 different. This can lead to false positives, especially when using
-                                 RECORDS_DIFFERENT which relies on the hashes being accurate.
-                                 RECORD_DIFFERENCES mode is not susceptible to this as it first
-                                 compares hashes and if they're different will transfer the whole
-                                 record and find any differences. Hence if the hash is wrong due to
-                                 order differences but the contents are identical, no record will be
-                                 flagged in this mode. This flag will cause more CPU usage on both
-                                 the remote comparator and the main comparator but will make sure
-                                 the hashes are consistent irrespective of the underlying order of
-                                 any maps. This flag only makes sense to set when using a remote
-                                 comparator, especially with RECORDS_DIFFERENT mode. Default is
-                                 false,unless using a remote server with RECORDS_DIFFERENT mode and
-                                 remoteServerHashes set to true.
--t,--threads <arg>               Number of threads to use. Use 0 to use 1 thread per core. (Default:
-                                 1)
--t1,--tls1 <arg>                 Set the TLS Policy options on cluster 1. The value passed should be
-                                 a JSON string. Valid keys in this string inlcude 'protocols',
-                                 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context',
-                                 the value should be a JSON string which can contain keys
-                                 'certChain' (path to the certificate chain PEM), 'privateKey' (path
-                                 to the certificate private key PEM), 'caCertChain' (path to the CA
-                                 certificate PEM), 'keyPassword' (password used for the certificate
-                                 chain PEM), 'tlsHost' (the tlsName of the Aerospike host). For
-                                 example: --tls1
-                                 '{"context":{"certChain":"cert.pem","privateKey":"key.pem","caCertC
-                                 hain":"cacert.pem","tlsHost":"tls1"}}'
--t2,--tls2 <arg>                 Set the TLS Policy options on cluster 2. The value passed should be
-                                 a JSON string. Valid keys in thisstring inlcude 'protocols',
-                                 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context',
-                                 the value should be a JSON string which can contain keys
-                                 'certChain' (path to the certificate chain PEM), 'privateKey' (path
-                                 to the certificate private key PEM), 'caCertChain' (path to the CA
-                                 certificate PEM), 'keyPassword' (password used for the certificate
-                                 chain PEM), 'tlsHost' (the tlsName of the Aerospike host). For
-                                 example: --tls2
-                                 '{"context":{"certChain":"cert.pem","privateKey":"key.pem","caCertC
-                                 hain":"cacert.pem","tlsHost":"tls2"}}'
+   --showMetadata                Output cluster metadata (Last update time, record size) on cluster differernces. This will require an
+                                 additional read which will impact performance
+-sm,--sortMaps <arg>             Sort maps. If using hashes to compare a local cluster with a remote cluster and the order in the maps is
+                                 different, the hashes will be different. This can lead to false positives, especially when using
+                                 RECORDS_DIFFERENT which relies on the hashes being accurate. RECORD_DIFFERENCES mode is not susceptible to
+                                 this as it first compares hashes and if they're different will transfer the whole record and find any
+                                 differences. Hence if the hash is wrong due to order differences but the contents are identical, no record
+                                 will be flagged in this mode. This flag will cause more CPU usage on both the remote comparator and the
+                                 main comparator but will make sure the hashes are consistent irrespective of the underlying order of any
+                                 maps. This flag only makes sense to set when using a remote comparator, especially with RECORDS_DIFFERENT
+                                 mode. Default is false,unless using a remote server with RECORDS_DIFFERENT mode and remoteServerHashes set
+                                 to true.
+-t,--threads <arg>               Number of threads to use. Use 0 to use 1 thread per core. (Default: 1)
+-t1,--tls1 <arg>                 Set the TLS Policy options on cluster 1. The value passed should be a JSON string. Valid keys in this
+                                 string inlcude 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value
+                                 should be a JSON string which can contain keys 'certChain' (path to the certificate chain PEM),
+                                 'privateKey' (path to the certificate private key PEM), 'caCertChain' (path to the CA certificate PEM),
+                                 'keyPassword' (password used for the certificate chain PEM), 'tlsHost' (the tlsName of the Aerospike host).
+                                 For example: --tls1
+                                 '{"context":{"certChain":"cert.pem","privateKey":"key.pem","caCertChain":"cacert.pem","tlsHost":"tls1"}}'
+-t2,--tls2 <arg>                 Set the TLS Policy options on cluster 2. The value passed should be a JSON string. Valid keys in thisstring
+                                 inlcude 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value should
+                                 be a JSON string which can contain keys 'certChain' (path to the certificate chain PEM), 'privateKey' (path
+                                 to the certificate private key PEM), 'caCertChain' (path to the CA certificate PEM), 'keyPassword'
+                                 (password used for the certificate chain PEM), 'tlsHost' (the tlsName of the Aerospike host). For example:
+                                 --tls2
+                                 '{"context":{"certChain":"cert.pem","privateKey":"key.pem","caCertChain":"cacert.pem","tlsHost":"tls2"}}'
 -u,--usage                       Display the usage and exit.
 -U1,--user1 <arg>                User name for cluster 1
 -U2,--user2 <arg>                User name for cluster 2
--V,--verbose                     Turn on verbose logging, especially for cluster details and TLS
-                                 connections
+-V,--verbose                     Turn on verbose logging, especially for cluster details and TLS connections
 ```
 The most significant options are:
 * -h1, h2: Specify the cluster connection details.

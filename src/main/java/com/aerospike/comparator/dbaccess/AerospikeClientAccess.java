@@ -15,6 +15,7 @@ public interface AerospikeClientAccess {
     boolean isLocal();
     void close();
     void touch(WritePolicy policy, Key key);
+    void delete(WritePolicy policy, Key key);
     boolean exists(Policy policy, Key key);
     Record get(Policy policy, Key key);
     RecordMetadata getMetadata(WritePolicy policy, Key key);

@@ -93,6 +93,27 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
     }
 
     @Override
+    public void delete(WritePolicy policy, Key key) {
+        Connection conn = null;
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_TOUCH);
+            RemoteUtils.sendPolicy(policy, conn.getDos());
+            RemoteUtils.sendKey(key, conn.getDos());
+            conn.getDis().readInt();
+        }
+        catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
+        }
+    }
+
+    @Override
     public boolean exists(Policy policy, Key key) {
         Connection conn = null;
         try {

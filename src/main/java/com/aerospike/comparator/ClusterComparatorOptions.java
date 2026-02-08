@@ -6,7 +6,9 @@ import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -33,9 +35,11 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         TOUCH(true, false),
         READ(true, false),
         RERUN(true, true),
+        CUSTOM(true, false),
         SCAN_TOUCH(false, true),
         SCAN_ASK(false, true),
-        SCAN_READ(false, true);
+        SCAN_READ(false, true),
+        SCAN_CUSTOM(false, true);
         
         private final boolean needsInputFile;
         private final boolean canUseOutputFile;
@@ -57,6 +61,13 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         RECORDS_DIFFERENT,
         RECORD_DIFFERENCES,
         FIND_OVERLAP
+    }
+    
+    public static enum CustomActions {
+        NONE,
+        TOUCH,
+        DELETE,
+        DELETE_DURABLY
     }
     
     private List<ClusterConfig> clusters = null;
@@ -106,6 +117,8 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     private boolean showMetadata = false;
     private int masterCluster = -1;
     private List<Integer> partitionList = null;
+    private Map<Integer, CustomActions> customActions;
+    private boolean skipChallenge = false;
     
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -201,7 +214,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         options.addOption("S", "startPartition", true, "Partition to start the comparison at. (Default: 0)");
         options.addOption("E", "endPartition", true, "Partition to end the comparison at. The comparsion will not include this partition. (Default: 4096)");
         options.addOption("t", "threads", true, "Number of threads to use. Use 0 to use 1 thread per core. (Default: 1)");
-        options.addOption("f", "file", true, "Path to a CSV file. If a comparison is run, this file will be overwritten if present.");
+        options.addOption("f", "file", true, "Path to an output CSV file. If a comparison is run, this file will be overwritten if present.");
         options.addOption("s", "setNames", true, "Set name to scan for differences. Multiple sets can be specified in a comma-separated list. If not specified, all sets will be scanned.");
         options.addOption("n", "namespaces", true, "Namespaces to scan for differences. Multiple namespaces can be specified in a comma-separated list. Must include at least one namespace.");
         options.addOption("q", "quiet", false, "Do not output spurious information like progress.");
@@ -218,9 +231,26 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 + "is useful for example if you want ensure you have non-overlapping mathematical sets of records which you want to merge together");
         options.addOption("u", "usage", false, "Display the usage and exit.");
         options.addOption("a", "action", true, "Action to take. Options are: 'scan' (scan for differences), 'touch' (touch the records specified in the file), 'read' (read the records in specified file), "
-                + ", 'scan_touch' (scan for differences, if any differences then automatically touch the records), 'scan_read' (scan for differences, if any differences then automatically read the record), "
-                + "'scan_ask' (scan for differences, if any differences then prompt the user, 'rerun' (read all the records from the previous run and see if they're still different. Requires an input file)"
-                + "as to whether to touch or read the records or not. Every options besides 'scan' MUST specify the 'file' option too. (Default: scan)");
+                + "'scan_touch' (scan for differences, if any differences then automatically touch the records), 'scan_read' (scan for differences, if any differences then automatically read the record), "
+                + "'scan_ask' (scan for differences, if any differences then prompt the user, 'rerun' (read all the records from the previous run and see if they're still different. Requires an input file) "
+                + "as to whether to touch or read the records or not, 'custom', allows a different action per cluster, 'scan_custom' which performs custom actions as the clusters are scanned. "
+                + "These last two options require the 'customActions' parameter to be specified too. "
+                + "Every options besides 'scan' MUST specify the 'file' option too. (Default: scan)");
+        options.addOption(null, "customActions", true, "Specify the action to take on each difference in the output file per cluster, rather than one global action. This parameter is only valid with the 'action' flag"
+                + "set to 'custom'. This only applies to the records in the output of a 'scan' action, and cannot be used while scanning.\n"
+                + "Actions must be specified in the format '<clusterId>:<action>', with multiple options separated by a comma. Cluster ids can specified as ordinal number (1-based, not 0-based),"
+                + "or cluster names.\n"
+                + "Valid options are:\n"
+                + "    TOUCH - If the record exists on this cluster, touch the record.\n"
+                + "    NONE - perform no action. This is the default\n"
+                + "    DELETE - If the record exists on this cluster, delete the record from this cluster. Note: this parameter is EXTREMELY DANGEROUS. Not only will the record be deleted from the "
+                + "local cluster, but since XDR propegates deletes by default, the record will be deleted from any clusters this customer forwards to.\n"
+                + "    DURABLE_DELETE - Same as DELETE, but use durable deletes instead.\n"
+                + "Examples:\n"
+                + "  -a custom --customActions 1:delete         (any records found on cluster one, remove them)\n"
+                + "  -a custom --customActions 1:touch,2:delete (touch records on cluster 1, delete them on cluster 2");
+        options.addOption(null, "skipChallenge", false, "If using a mode which deletes records and a record is to be deleted, normally a confirmation will be asked for "
+                + "when deleting the first record. This parameter will prevent that challenge, removing the safe guard. USE AT YOUR OWN RISK.");
         options.addOption("c", "console", false, "Output differences to the console. 'quiet' flag does not affect what is output. Can be used in conjunction with 'file' flag for dual output");
         options.addOption("l", "limit", true, "Limit the number of differences to the passed value. Pass 0 for unlimited. (Default: 0)");
         options.addOption("h1", "hosts1", true, 
@@ -432,8 +462,8 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             else if (this.namespaces == null || this.namespaces.length == 0) {
                 System.out.println("namespace(s) must be specified");
             }
-            else if ((this.action == Action.SCAN_ASK || this.action == Action.TOUCH || this.action == Action.READ || this.action == Action.RERUN) && this.outputFileName == null) {
-                System.out.println("If action is not 'scan' or 'scan_touch' or 'scan_read', the fileName must also be specified");
+            else if ((this.action == Action.SCAN_ASK || this.action == Action.TOUCH || this.action == Action.CUSTOM || this.action == Action.READ || this.action == Action.RERUN) && this.outputFileName == null) {
+                System.out.println("If action is not 'scan' or 'scan_touch' or 'scan_read' or 'scan_custom', the fileName must also be specified");
             }
             else if (this.action == Action.RERUN && this.compareMode == CompareMode.QUICK_NAMESPACE) {
                 System.out.println("Re-running is not supported for QUICK_NAMESPACE compare mode");
@@ -471,6 +501,18 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             else if (this.partitionList != null && !validatePartitionList()) {
                 System.out.println("Aborting scan due to invalid partition list");
             }
+            else if (this.action == Action.CUSTOM && this.customActions == null) {
+                System.out.println("Action of CUSTOM requires the '--customActions' parameter to be passed");
+            }
+            else if (this.action == Action.SCAN_CUSTOM && this.customActions == null) {
+                System.out.println("Action of SCAN_CUSTOM requires the '--customActions' parameter to be passed");
+            }
+            else if (!(this.action == Action.CUSTOM || this.action == Action.SCAN_CUSTOM) && this.customActions != null) {
+                System.out.printf("Action of %s cannot take the '--customActions' parameter, this is only used with an action of CUSTOM\n", this.action);
+            }
+            else if ((this.action == Action.CUSTOM || this.action == Action.SCAN_CUSTOM) && !validateCustomClusterOrdinals()) {
+                System.out.println("Aborting due to invalid custom actions cluster configuration");
+            }
             else {
                 valid = !hasErrors;
             }
@@ -486,6 +528,16 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         }
     }
     
+    private boolean validateCustomClusterOrdinals() {
+        for (int clusterOrdinal : this.customActions.keySet()) {
+            if (!isClusterIdValid(clusterOrdinal)) {
+                System.out.printf("Invalid cluster ordinal: %d. Ordinals must be in the range %d->%d\n",
+                        clusterOrdinal+1, 1, this.getNumberOfClusters());
+                return false;
+            }
+        }
+        return true;
+    }
     private void loadConfig(String fileName) throws Exception {
         ObjectMapper mapper = YAMLMapper.builder().enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS).build();
         mapper.findAndRegisterModules();
@@ -579,9 +631,6 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         if (ports.length == 2) {
             this.remoteServerHeartbeatPort = Integer.valueOf(ports[1]);
         }
-        if (cl.hasOption("remoteServerTls")) {
-            this.remoteServerTls = parseTlsOptions(cl.getOptionValue("remoteServerTls")).toTlsPolicy();
-        }
         this.remoteCacheSize = Integer.valueOf(cl.getOptionValue("remoteCacheSize", "0"));
         this.remoteServerHashes = Boolean.valueOf(cl.getOptionValue("remoteServerHashes", "true"));
         this.verbose = cl.hasOption("verbose");
@@ -589,6 +638,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         if (this.debug) {
             this.silent = false;
             this.verbose = true;
+        }
+        if (cl.hasOption("remoteServerTls")) {
+            this.remoteServerTls = parseTlsOptions(cl.getOptionValue("remoteServerTls")).toTlsPolicy(this.debug);
         }
         if (cl.hasOption("sortMaps")) {
             this.sortMaps = Boolean.valueOf(cl.getOptionValue("sortMaps"));
@@ -611,7 +663,39 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         }
         
         this.masterCluster = Integer.parseInt(cl.getOptionValue("masterCluster", "-1"));
+        this.customActions = parseCustomActions(cl.getOptionValue("customActions"));
+        this.skipChallenge = cl.hasOption("skipChallenge");
+        
         this.validate(options, cl);
+    }
+    
+    private Map<Integer, CustomActions> parseCustomActions(String param) {
+        if (param == null || param.isEmpty()) {
+            return null;
+        }
+        String[] perClusterActions = param.split(",");
+        Map<Integer, CustomActions> result = new HashMap<>();
+        for (String thisClusterAction : perClusterActions) {
+            String[] parts = thisClusterAction.split(":");
+            if (parts.length != 2) {
+                System.out.printf("Invalid custom action part '%s'. Expected format is '<cluster_id>:<action>", thisClusterAction);
+                return null;
+            }
+            String clusterId = parts[0];
+            String action = parts[1].toUpperCase();
+            int clusterOrdinal;
+            if (clusterId.matches("\\d+")) {
+                clusterOrdinal = Integer.parseInt(clusterId)-1;
+            }
+            else {
+                clusterOrdinal = clusterNameToId(clusterId);
+            }
+            if (result.containsKey(clusterOrdinal)) {
+                System.out.printf("Invalid custom action '%s', cluster ordinal %d has been specified multiple times", param, clusterOrdinal);
+            }
+            result.put(clusterOrdinal, CustomActions.valueOf(action));
+        }
+        return result;
     }
 
     @Override
@@ -760,11 +844,11 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     }
 
     private AuthMode getAuthMode1() {
-        return authMode1;
+        return authMode1 == null ? AuthMode.INTERNAL : authMode1;
     }
 
     private AuthMode getAuthMode2() {
-        return authMode2;
+        return authMode2 == null ? AuthMode.INTERNAL : authMode2;
     }
     private String getClusterName1() {
         return clusterName1;
@@ -883,6 +967,14 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     
     public List<Integer> getPartitionList() {
         return partitionList;
+    }
+    
+    public Map<Integer, CustomActions> getCustomActions() {
+        return customActions;
+    }
+    
+    public boolean isSkipChallenge() {
+        return skipChallenge;
     }
     
     public boolean isDateInRange(long timestamp) {

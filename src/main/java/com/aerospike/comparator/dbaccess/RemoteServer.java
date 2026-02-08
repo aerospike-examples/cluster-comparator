@@ -25,6 +25,7 @@ import com.aerospike.client.query.Statement;
 public class RemoteServer {
     public static final int CMD_CLOSE = 1;
     public static final int CMD_TOUCH = 2;
+    public static final int CMD_DELETE = 19;
     public static final int CMD_EXISTS = 17;
     public static final int CMD_GET = 3;
     public static final int CMD_GET_METADATA = 18;
@@ -352,6 +353,14 @@ public class RemoteServer {
             dos.writeInt(0);
         }
         
+        private void doDelete() throws IOException {
+            WritePolicy policy = new WritePolicy();
+            policy = (WritePolicy) RemoteUtils.readPolicy(policy, dis);
+            Key key = RemoteUtils.readKey(dis);
+            client.delete(policy, key);
+            dos.writeInt(0);
+        }
+        
         private void doExists() throws IOException {
             WritePolicy policy = new WritePolicy();
             policy = (WritePolicy) RemoteUtils.readPolicy(policy, dis);
@@ -420,6 +429,10 @@ public class RemoteServer {
                         
                     case CMD_TOUCH:
                         doTouch();
+                        break;
+                        
+                    case CMD_DELETE:
+                        doDelete();
                         break;
                         
                     case CMD_EXISTS:
