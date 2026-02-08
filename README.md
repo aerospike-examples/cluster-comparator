@@ -46,9 +46,10 @@ options:
                                  then automatically touch the records), 'scan_read' (scan for differences, if any differences then
                                  automatically read the record), 'scan_ask' (scan for differences, if any differences then prompt the user,
                                  'rerun' (read all the records from the previous run and see if they're still different. Requires an input
-                                 file) as to whether to touch or read the records or not, 'custom', allows a different action per cluster.
-                                 This option requires the 'customActions' parameter to be specified too. Every options besides 'scan' MUST
-                                 specify the 'file' option too. (Default: scan)
+                                 file) as to whether to touch or read the records or not, 'custom', allows a different action per cluster,
+                                 'scan_custom' which performs custom actions as the clusters are scanned. These last two options require the
+                                 'customActions' parameter to be specified too. Every options besides 'scan' MUST specify the 'file' option
+                                 too. (Default: scan)
 -a1,--authMode1 <arg>            Set the auth mode of cluster1. Default: INTERNAL
 -a2,--authMode2 <arg>            Set the auth mode of cluster2. Default: INTERNAL
    --binsOnly                    When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the full differences, just the bin names
@@ -159,6 +160,9 @@ options:
 -sa2,--useServicesAlternate2     Use services alternative when connecting to cluster 2
    --showMetadata                Output cluster metadata (Last update time, record size) on cluster differernces. This will require an
                                  additional read which will impact performance
+   --skipChallenge               If using a mode which deletes records and a record is to be deleted, normally a confirmation will be asked
+                                 for when deleting the first record. This parameter will prevent that challenge, removing the safe guard.
+                                 USE AT YOUR OWN RISK.
 -sm,--sortMaps <arg>             Sort maps. If using hashes to compare a local cluster with a remote cluster and the order in the maps is
                                  different, the hashes will be different. This can lead to false positives, especially when using
                                  RECORDS_DIFFERENT which relies on the hashes being accurate. RECORD_DIFFERENCES mode is not susceptible to
