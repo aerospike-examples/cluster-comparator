@@ -462,8 +462,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             else if (this.namespaces == null || this.namespaces.length == 0) {
                 System.out.println("namespace(s) must be specified");
             }
-            else if ((this.action == Action.SCAN_ASK || this.action == Action.TOUCH || this.action == Action.CUSTOM || this.action == Action.READ || this.action == Action.RERUN) && this.outputFileName == null) {
-                System.out.println("If action is not 'scan' or 'scan_touch' or 'scan_read' or 'scan_custom', the fileName must also be specified");
+            else if (this.action.canUseOutputFile() && 
+                     (this.action == Action.SCAN_ASK || this.action == Action.RERUN) && 
+                     this.outputFileName == null) {
+                System.out.println("Action " + this.action + " requires an output file but none was provided");
             }
             else if (this.action == Action.RERUN && this.compareMode == CompareMode.QUICK_NAMESPACE) {
                 System.out.println("Re-running is not supported for QUICK_NAMESPACE compare mode");
