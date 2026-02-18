@@ -91,7 +91,7 @@ public class PathOption {
         if (index < this.pathParts.length) {
             // This matches only if the remaining items are ** wildcards
             for (int i = index; i < this.pathParts.length; i++) {
-                if (!"**".equals(this.pathParts[index])) {
+                if (!"**".equals(this.pathParts[i])) {
                     return false;
                 }
             }
@@ -170,5 +170,10 @@ public class PathOption {
         parts.add("compSet");
         parts.add("test");
         System.out.println(option.matches(parts) + " - should be true");
+        
+        option = new PathOption("/test/**/nothere", PathAction.IGNORE);
+        parts = new ArrayDeque<>();
+        parts.add("test");
+        System.out.println(option.matches(parts) + " - should be false");
     }
 }

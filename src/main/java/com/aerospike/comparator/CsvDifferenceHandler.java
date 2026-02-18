@@ -101,7 +101,7 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         String digest = Buffer.bytesToHexString(key.digest);
         for (int i = 0; i < numberOfClusters; i++) {
             if (options.getCompareMode() == CompareMode.FIND_OVERLAP) {
-                if (missingFromClusters != null || missingFromClusters.contains(i)) {
+                if (missingFromClusters != null && missingFromClusters.contains(i)) {
                     sb.append(digest);
                 }
                 else {

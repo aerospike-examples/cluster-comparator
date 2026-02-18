@@ -44,7 +44,7 @@ public class MetadataComparator {
                 List<Map<String, String>> nsDifferences1 = this.infoParser.invokeCommandReturningObjectOnAllNodes(clients[client1Index], "namespace/" + nsName);
                 List<Map<String, String>> nsDifferences2 = this.infoParser.invokeCommandReturningObjectOnAllNodes(clients[client2Index], "namespace/" + nsName);
                 this.filterOut(nsDifferences1, NS_FILTER_OUT);
-                this.filterOut(nsDifferences1, NS_FILTER_OUT);
+                this.filterOut(nsDifferences2, NS_FILTER_OUT);
                 this.removeMismatchesBetweenNodes(nsDifferences1, differenceSet, clients[client1Index].getNodeNames(), client1Index, client1Index, client2Index);
                 this.removeMismatchesBetweenNodes(nsDifferences2, differenceSet, clients[client2Index].getNodeNames(), client2Index, client1Index, client2Index);
                 RecordComparator comparator = new RecordComparator();
@@ -154,10 +154,10 @@ public class MetadataComparator {
         differenceSet.pushPath("/config");
         for (int i = 0; i < clients.length; i++) {
             for (int j = i+1; j < clients.length; j++) {
-                compareStanzas(clients, i, j, "network", differenceSet);
-                compareStanzas(clients, i, j, "security", differenceSet);
                 compareStanzas(clients, i, j, "service", differenceSet);
                 compareStanzas(clients, i, j, "network", differenceSet);
+                compareStanzas(clients, i, j, "security", differenceSet);
+                compareStanzas(clients, i, j, "logging", differenceSet);
                 
                 compareNamespaces(clients, i, j, differenceSet);
                 compareSets(clients, i, j, differenceSet);

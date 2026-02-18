@@ -4,7 +4,7 @@ package com.aerospike.comparator;
 public interface NamespaceNameResolver {
     /**
      * Namespaces can be translated. For example namespace A on cluster 1 might be known as namespace B on cluster 2. The translation YAML
-     * file facilitates this mapping. When comparing namespaces, the "source" namesapce (A) will be given, but for each cluster the 
+     * file facilitates this mapping. When comparing namespaces, the "source" namespace (A) will be given, but for each cluster the 
      * namespace must be looked up so the comparator can form valid keys using A on cluster 1 and B on cluster 2. This method provides that
      * mapping.  
      * @param name

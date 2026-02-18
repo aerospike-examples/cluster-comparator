@@ -212,7 +212,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         Options options = new Options();
         options.addOption("cf", "configFile", true, "YAML file with config options in it");
         options.addOption("S", "startPartition", true, "Partition to start the comparison at. (Default: 0)");
-        options.addOption("E", "endPartition", true, "Partition to end the comparison at. The comparsion will not include this partition. (Default: 4096)");
+        options.addOption("E", "endPartition", true, "Partition to end the comparison at. The comparison will not include this partition. (Default: 4096)");
         options.addOption("t", "threads", true, "Number of threads to use. Use 0 to use 1 thread per core. (Default: 1)");
         options.addOption("f", "file", true, "Path to an output CSV file. If a comparison is run, this file will be overwritten if present.");
         options.addOption("s", "setNames", true, "Set name to scan for differences. Multiple sets can be specified in a comma-separated list. If not specified, all sets will be scanned.");
@@ -221,7 +221,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         options.addOption("C", "compareMode", true, "Determine which sort of comparison to use. The options are:\n"
                 + "QUICK_NAMESPACE - Perform a quick (partition by partition count) comparison of an entire namespace. Cannot be used if migrations are going on or not all partitions are available. NOTE:"
                 + "This method compares object counts at a partition level, so is not always accurate. A partition which has record A on one side and record B on the other side would compare"
-                + "as equal for example. Also, since this compares partition by partition, comparison must be at the namesapce level, not the set level.\n"
+                + "as equal for example. Also, since this compares partition by partition, comparison must be at the namespace level, not the set level.\n"
                 + "MISSING_RECORDS (default) -- Check digests on both sides to find missing records. Does not compare record contents and does not need to read records off the drive. This "
                 + "is fast but will not detect if the contents of the records are different.\n"
                 + "RECORDS_DIFFERENT -- Runs through all records and detects both missing records on either side and if record contents themselves are different. This will read all the records "
@@ -244,7 +244,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 + "    TOUCH - If the record exists on this cluster, touch the record.\n"
                 + "    NONE - perform no action. This is the default\n"
                 + "    DELETE - If the record exists on this cluster, delete the record from this cluster. Note: this parameter is EXTREMELY DANGEROUS. Not only will the record be deleted from the "
-                + "local cluster, but since XDR propegates deletes by default, the record will be deleted from any clusters this customer forwards to.\n"
+                + "local cluster, but since XDR propagates deletes by default, the record will be deleted from any clusters this customer forwards to.\n"
                 + "    DURABLE_DELETE - Same as DELETE, but use durable deletes instead.\n"
                 + "Examples:\n"
                 + "  -a custom --customActions 1:delete         (any records found on cluster one, remove them)\n"
@@ -281,12 +281,12 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         options.addOption("P2", "password2", true, "Password for cluster 2");
         options.addOption("r", "rps", true, "Limit requests per second on the cluster to this value. Use 0 for unlimited. (Default: 0)");
         options.addOption("t1", "tls1", true, "Set the TLS Policy options on cluster 1. The value passed should be a JSON string. Valid keys in this "
-                + "string inlcude 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value should be a JSON string which "
+                + "string include 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value should be a JSON string which "
                 + "can contain keys 'certChain' (path to the certificate chain PEM), 'privateKey' (path to the certificate private key PEM), "
                 + "'caCertChain' (path to the CA certificate PEM), 'keyPassword' (password used for the certificate chain PEM), 'tlsHost' (the tlsName of the Aerospike host). "
                 + "For example: --tls1 '{\"context\":{\"certChain\":\"cert.pem\",\"privateKey\":\"key.pem\",\"caCertChain\":\"cacert.pem\",\"tlsHost\":\"tls1\"}}'");
         options.addOption("t2", "tls2", true, "Set the TLS Policy options on cluster 2. The value passed should be a JSON string. Valid keys in this"
-                + "string inlcude 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value should be a JSON string which "
+                + "string include 'protocols', 'ciphers', 'revokeCerts', 'context' and 'loginOnly'. For 'context', the value should be a JSON string which "
                 + "can contain keys 'certChain' (path to the certificate chain PEM), 'privateKey' (path to the certificate private key PEM), "
                 + "'caCertChain' (path to the CA certificate PEM), 'keyPassword' (password used for the certificate chain PEM), 'tlsHost' (the tlsName of the Aerospike host). "
                 + "For example: --tls2 '{\"context\":{\"certChain\":\"cert.pem\",\"privateKey\":\"key.pem\",\"caCertChain\":\"cacert.pem\",\"tlsHost\":\"tls2\"}}'");
@@ -330,7 +330,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         options.addOption("i", "inputFile", true, "Specify an input file for records to compare. This is only used with the RERUN, READ and TOUCH actions and is "
                 + "typically set to the output file of a previous run.");
         options.addOption(null, "binsOnly", false, "When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the full differences, just the bin names which are different");
-        options.addOption(null, "showMetadata", false, "Output cluster metadata (Last update time, record size) on cluster differernces. This will require an additional read which will impact performance");
+        options.addOption(null, "showMetadata", false, "Output cluster metadata (Last update time, record size) on cluster differences. This will require an additional read which will impact performance");
         options.addOption("pl", "partitionList", true, "Specify a list of partitions to scan. If this argument is specified, neither the beginPartition nor the endPartition argument can be specified");
 //        options.addOption(null, "masterCluster", true, "Sets one cluster to be the master for the sake of comparison. If this flag is set, the date range filter must be specified (beginDate and/or endDate) "
 //                + "and this date range will apply only to the master cluster. ");

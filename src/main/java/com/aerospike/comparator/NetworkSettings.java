@@ -59,10 +59,6 @@ public class NetworkSettings {
         this.connectTimeout = connectTimeout;
     }
 
-    public void setSleepBetweenRetried(Integer sleepBetweenRetries) {
-        this.sleepBetweenRetries = sleepBetweenRetries;
-    }
-
     public <T extends Policy> T applyTo(T policy) {
         if (connectTimeout != null) {
             policy.connectTimeout = connectTimeout;

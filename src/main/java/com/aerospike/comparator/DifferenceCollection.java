@@ -296,7 +296,7 @@ public class DifferenceCollection {
                 }
                 String cluster = clustersWithRecord.get(i)+"~"+clustersWithRecord.get(j);
                 if (!clustersWithDifferentValues.contains(cluster)) {
-                    addSameValues(results, i, j);
+                    addSameValues(results, clustersWithRecord.get(i), clustersWithRecord.get(j));
                 }
             }
         }

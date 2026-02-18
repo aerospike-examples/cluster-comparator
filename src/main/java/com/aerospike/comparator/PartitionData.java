@@ -7,7 +7,7 @@ public class PartitionData {
     private final int nReplicas;
     private final int replica;
     private final int nDupl;
-    private final String wokingMaster;
+    private final String workingMaster;
     private final long emigrates;
     private final long leadEmigrates;
     private final long immigrates;
@@ -22,7 +22,7 @@ public class PartitionData {
         nReplicas = Integer.parseInt(cols[3]);
         replica = Integer.parseInt(cols[4]);
         nDupl = Integer.parseInt(cols[5]);
-        wokingMaster = cols[6];
+        workingMaster = cols[6];
         emigrates = Long.parseLong(cols[7]);
         leadEmigrates = Long.parseLong(cols[8]);
         immigrates = Long.parseLong(cols[9]);
@@ -54,8 +54,8 @@ public class PartitionData {
         return nDupl;
     }
 
-    public String getWokingMaster() {
-        return wokingMaster;
+    public String getWorkingMaster() {
+        return workingMaster;
     }
 
     public long getEmigrates() {

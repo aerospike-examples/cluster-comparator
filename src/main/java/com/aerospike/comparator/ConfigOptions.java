@@ -74,7 +74,7 @@ public class ConfigOptions {
      * namespace B is passed, A will be returned.
      * <p/>
      * NOTE: This method performs a "best guess" for this resolution as there is no guarantee that multiple
-     * namesapces do not map to the same namesapce. Eg A->B, C->B, there is no way of ensuring the correct
+     * namespaces do not map to the same namespace. Eg A->B, C->B, there is no way of ensuring the correct
      * cluster is returned
      * @param name
      * @return

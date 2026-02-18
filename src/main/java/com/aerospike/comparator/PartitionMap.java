@@ -21,7 +21,7 @@ public class PartitionMap {
             boolean first = true;
             for (String line: lines) {
                 if (first) {
-                    // This is a headng line, skip it
+                    // This is a heading line, skip it
                     first = false;
                     continue;
                 }
@@ -35,7 +35,7 @@ public class PartitionMap {
                     }
                     namespaceToPartitions.put(namespace, partData);
                 }
-                if (nodeName.equals(data.getWokingMaster())) {
+                if (nodeName.equals(data.getWorkingMaster())) {
                     namespaceToPartitions.get(namespace).set(data.getPartitionId(), data);
                 }
             }

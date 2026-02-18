@@ -99,7 +99,7 @@ public class FileLine {
             throw new IllegalArgumentException(String.format("key must be in the range 0 to %d, not %d",  digests.length, i));
         }
         // Use a digest in preference to a user key as it's difficult to tell the difference between "2" and 2
-        // Note that if digests exists on the record they will all be identical so we can just use the first one we find.
+        // Note that if digests exist on the record they will all be identical so we can just use the first one we find.
         String digest = getDigest();
         if (digest != null) {
             return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), hexStringToByteArray(digest), this.setName, Value.get(this.userKey));

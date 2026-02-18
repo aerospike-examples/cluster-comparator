@@ -88,7 +88,7 @@ class StringWithOffset {
                     return data.substring(start, offset);
                 }
                 else {
-                    throw new ParseException(String.format("Error whilst parsing string: '%s': received '{' to start object but didn't having a matching closing '}'"));
+                    throw new ParseException(String.format("Error whilst parsing string: '%s': received '{' to start object but didn't have a matching closing '}'"));
                 }
             }
             else {

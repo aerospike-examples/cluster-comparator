@@ -79,7 +79,7 @@ public class ClusterComparator {
     private int threadsToUse;
     private List<Integer> partitionList = new ArrayList<>();
     private List<Integer> failedPartitionsList = new ArrayList<>();
-    private Expression filterExpresion = null;
+    private Expression filterExpression = null;
     private final int numberOfClusters;
     
 //    private final Policy tolerantReadPolicy = new Policy();
@@ -321,10 +321,10 @@ public class ClusterComparator {
             String thisNamespace = options.getNamespaceName(namespace, i);
             PartitionMap partitionMap = new PartitionMap(clients[i]);
             if (!partitionMap.isComplete(thisNamespace)) {
-                throw new QuickCompareException("Not all partitions are available for namespace '" + thisNamespace + "' on cluster 1, quick compare is not available.");
+                throw new QuickCompareException("Not all partitions are available for namespace '" + thisNamespace + "' on cluster " +options.clusterIdToName(i) + ", quick compare is not available.");
             }
             if (partitionMap.isMigrationsHappening(thisNamespace)) {
-                throw new QuickCompareException("Migrations are happening for namespace '" + thisNamespace + "' on cluster 1, quick compare is not available.");
+                throw new QuickCompareException("Migrations are happening for namespace '" + thisNamespace + "' on cluster " +options.clusterIdToName(i) + ", quick compare is not available.");
             }
             partitionMaps[i] = partitionMap;
         });
@@ -380,7 +380,7 @@ public class ClusterComparator {
         return options.isDateInRange(recordMetadatas[clusterId].getLastUpdateMs());
     }
     
-    private boolean filterMissingRecordsByMasterId(RecordMetadata[] recordMetadatas, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord) {
+    private boolean filterMissingRecordsByMasterId(RecordMetadata[] recordMetadatas, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, Key keyMissing) {
         if (options.getMasterCluster() >= 0 && recordMetadatas != null) {
             if (clustersWithoutRecord.contains(options.getMasterCluster())) {
                 // The master cluster has this record, check to see if the LUT is in the specified range.
@@ -392,6 +392,7 @@ public class ClusterComparator {
                             if (options.isDebug()) {
                                 System.out.printf("Master cluster %s has record %s and is valid, cluster %s also has the record but the LUT (%s) is outside the range\n",
                                         options.clusterIdToName(options.getMasterCluster()),
+                                        keyMissing,
                                         options.clusterIdToName(clusterId),
                                         options.getDateFormat().format(new Date(recordMetadatas[clusterId].getLastUpdateMs())));
                             }
@@ -424,7 +425,7 @@ public class ClusterComparator {
     private void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, 
             boolean hasRecordLevelDifferences, int partitionId, Key keyMissing) {
         RecordMetadata[] recordMetadatas = getMetadata(clients, keyMissing, clustersWithoutRecord, null);
-        if (!filterMissingRecordsByMasterId(recordMetadatas, clustersWithRecord, clustersWithoutRecord)) {
+        if (!filterMissingRecordsByMasterId(recordMetadatas, clustersWithRecord, clustersWithoutRecord, keyMissing)) {
             return;
         }
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
@@ -535,7 +536,7 @@ public class ClusterComparator {
         queryPolicy.maxConcurrentNodes = 1;
         queryPolicy.includeBinData = options.isRecordLevelCompare();
         queryPolicy.shortQuery = false;
-        queryPolicy.filterExp = this.filterExpresion;
+        queryPolicy.filterExp = this.filterExpression;
         
         int rps = options.getRps()/this.threadsToUse;
         if (options.getRps() > 0 && rps == 0) {
@@ -944,7 +945,7 @@ public class ClusterComparator {
     }
     
     private void performComparisons(AerospikeClientAccess[] clients) throws InterruptedException {
-        this.filterExpresion = formFilterExpression();
+        this.filterExpression = formFilterExpression();
         for (int i = 0; i < clients.length; i++) {
             recordsMissingOnCluster.set(i, 0);
             recordsProcessedOnCluster.set(i, 0);
