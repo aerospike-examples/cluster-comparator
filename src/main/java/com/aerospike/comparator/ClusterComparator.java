@@ -118,7 +118,7 @@ public class ClusterComparator {
         if (policy == null) {
             return "null";
         }
-        StringBuffer sb = new StringBuffer()
+        StringBuilder sb = new StringBuilder()
             .append(policy.getClass().getSimpleName())
             .append("%n\t totalTimeout: ").append(policy.totalTimeout)
             .append("%n\t sleepBetweenRetries: ").append(policy.sleepBetweenRetries)
@@ -1097,7 +1097,7 @@ public class ClusterComparator {
     }
     
     private String getChallengeString(int length) {
-        StringBuffer sb = new StringBuffer();
+        StringBuilder sb = new StringBuilder();
         for (int i = 0; i < length; i++) {
             sb.append((char)('a' + ThreadLocalRandom.current().nextInt(26)));
         }
