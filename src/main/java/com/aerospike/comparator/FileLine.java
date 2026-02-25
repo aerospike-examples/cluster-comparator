@@ -102,7 +102,7 @@ public class FileLine {
         // Note that if digests exist on the record they will all be identical so we can just use the first one we find.
         String digest = getDigest();
         if (digest != null) {
-            return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), hexStringToByteArray(digest), this.setName, Value.get(this.userKey));
+            return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), hexStringToByteArray(digest), this.setName == null || this.setName.isEmpty() ? null : this.setName, null); //Value.get(this.userKey));
         }
         if (userKey != null) {
             return new Key(resolver.getNamespaceNameViaSource(this.namespace, i), this.setName, this.userKey);

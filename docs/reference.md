@@ -114,7 +114,7 @@ java -jar cluster-comparator.jar \
 |---------------------|-------------|---------|
 | `-cf`, `--configFile` | YAML configuration file path | `config.yaml` |
 | `-pf`, `--pathOptionsFile` | YAML file for field-specific actions | `path-options.yaml` |
-| `--customActions` | Custom actions per cluster on differences | `cluster1:touch,cluster2:read` |
+| `--customActions` | Custom actions per cluster on differences (see below) | `1:touch,2:delete` |
 | `-sm`, `--sortMaps` | Sort map contents for consistent comparison | `true` |
 | `-m`, `--metadataCompare` | Perform metadata-only comparison | _(flag, no value)_ |
 | `--skipChallenge` | Skip deletion confirmations | _(flag, no value)_ |
@@ -179,6 +179,28 @@ java -jar cluster-comparator.jar \
 | `read` | ✅ | ❌ | Read records from input file |
 | `rerun` | ✅ | ✅ | Re-compare records from input file |
 | `custom` | ✅ | ❌ | Perform custom actions on records from input file |
+
+### Custom Actions (`--customActions`)
+
+Used with `custom` and `scan_custom` actions. Specify per-cluster actions in the format `<clusterId>:<action>`, comma-separated. Cluster IDs are 1-based ordinals or cluster names.
+
+| Custom Action | Description |
+|---------------|-------------|
+| `NONE` | No action (default) |
+| `TOUCH` | Touch the record if it exists on this cluster |
+| `DELETE` | Delete the record from this cluster. **DANGEROUS:** deletes propagate via XDR to downstream clusters by default |
+| `DURABLE_DELETE` | Same as `DELETE`, but uses durable deletes. Ensures the delete is persisted and not undone the cold start of a node |
+
+```bash
+# Delete records from cluster 1 only
+--action custom --customActions 1:delete
+
+# Touch on cluster 1, durable delete on cluster 2
+--action custom --customActions 1:touch,2:durable_delete
+
+# Using cluster names
+--action custom --customActions primary:touch,replica:delete
+```
 
 ## 🔍 Comparison Mode Reference
 

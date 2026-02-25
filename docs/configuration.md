@@ -270,7 +270,7 @@ java -jar cluster-comparator.jar \
 - path: /app/users/favorite_categories
   action: compareUnordered  
 ```
-**Use case:** Lists where order doesn't matter (tags, categories, permissions)
+**Use case:** Lists where order doesn't matter (tags, categories, permissions). So `[1,2,3]` and `[2,3,1]` are considered identical using this option. THe default is that list ordering is important and items which are not the same as the item in the other list at the same position will be marked as different.
 
 #### Real-World Examples
 

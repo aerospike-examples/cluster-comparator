@@ -67,7 +67,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         NONE,
         TOUCH,
         DELETE,
-        DELETE_DURABLY
+        DURABLE_DELETE
     }
     
     private List<ClusterConfig> clusters = null;

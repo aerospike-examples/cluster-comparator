@@ -1121,7 +1121,7 @@ public class ClusterComparator {
                 break;
                 
             case DELETE:
-            case DELETE_DURABLY:
+            case DURABLE_DELETE:
                 if (!hasDoneFirstDelete && !options.isSkipChallenge()) {
                     hasChallengeActive.set(true);
                     String challenge = getChallengeString(6);
@@ -1138,7 +1138,7 @@ public class ClusterComparator {
                     hasChallengeActive.set(false);
                 }
 
-                writePolicyToUse.durableDelete = action == CustomActions.DELETE_DURABLY;
+                writePolicyToUse.durableDelete = action == CustomActions.DURABLE_DELETE;
                 client.delete(writePolicyToUse, key);
                 if (!options.isSilent()) {
                     System.out.printf("Deleting record %s on cluster %d\n", key, clusterOrdinal+1);

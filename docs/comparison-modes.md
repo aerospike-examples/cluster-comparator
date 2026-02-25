@@ -288,6 +288,9 @@ Control what happens when differences are found:
 | `read` | ✅ | ❌ | Read records from previous scan |
 | `rerun` | ✅ | ✅ | Re-compare records from previous scan |
 | `custom` | ✅ | ❌ | Custom action per cluster |
+| `scan_custom` | ❌ | ✅ | Compare + custom action per cluster during scan |
+
+The `custom` and `scan_custom` actions support per-cluster actions via `--customActions`: `NONE`, `TOUCH`, `DELETE`, and `DURABLE_DELETE`. See [Quick Reference - Custom Actions](reference.md#custom-actions---customactions) for details.
 
 ### Workflow Examples
 

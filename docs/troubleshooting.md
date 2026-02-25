@@ -264,10 +264,13 @@ java -jar cluster-comparator.jar --user1 $AS_USER1 --password1 $AS_PASSWORD1
 ## 🛡️ Safety Features
 
 ### Confirmation Prompts
-For destructive operations, the tool requires confirmation:
+For destructive operations (`DELETE` and `DURABLE_DELETE`), the tool requires confirmation:
 ```bash
 # This will prompt for confirmation before deleting
 --action custom --customActions 1:delete
+
+# Use durable deletes (persisted, not undone by older-generation writes)
+--action custom --customActions 1:durable_delete
 
 # To skip confirmation (dangerous!)
 --skipChallenge
@@ -288,7 +291,7 @@ Before any destructive operations:
 1. Take cluster snapshots
 2. Test on non-production data first
 3. Run with `--limit` parameter initially
-4. Validate with `scan` action before using `touch` or `delete`
+4. Validate with `scan` action before using `touch`, `delete`, or `durable_delete`
 
 ## 📊 Monitoring and Logging
 

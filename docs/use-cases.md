@@ -153,7 +153,12 @@ java -jar cluster-comparator.jar \
   --inputFile cluster1-only.csv
 ```
 
-**⚠️ WARNING:** Delete operations are irreversible and can propagate via XDR. Always test first!
+**⚠️ WARNING:** Delete operations are irreversible and propagate via XDR to downstream clusters by default. Always test first!
+
+To ensure deletes are durable (persisted and not undo by a cold-start of a node), use `DURABLE_DELETE`:
+```bash
+--action custom --customActions 1:durable_delete --inputFile cluster1-only.csv
+```
 
 ### 7. **Performance Testing Validation**
 *Scenario: Ensure test data was loaded correctly across clusters.*
