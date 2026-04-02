@@ -29,7 +29,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
  *
  */
 public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceNameResolver {
-    private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-hh:mm:ssZ";
+    private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-HH:mm:ssZ";
     public static enum Action {
         SCAN(false, true),
         TOUCH(true, false),
