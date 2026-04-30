@@ -100,6 +100,7 @@ java -jar cluster-comparator.jar \
 | `-S`, `--startPartition` | Starting partition number | `0` |
 | `-E`, `--endPartition` | Ending partition number | `1000` |
 | `-pl`, `--partitionList` | Specific partitions to scan (alternative to start/end) | `0,5,10,15` |
+| `-sdv`, `--skipDateRangeVerify` | Skip follow-up reads for missing records in date-filtered scans | _(flag, no value)_ |
 
 ### Action & Comparison Options
 | Option (Short/Long) | Description | Example |
@@ -118,6 +119,7 @@ java -jar cluster-comparator.jar \
 | `-sm`, `--sortMaps` | Sort map contents for consistent comparison | `true` |
 | `-m`, `--metadataCompare` | Perform metadata-only comparison | _(flag, no value)_ |
 | `--skipChallenge` | Skip deletion confirmations | _(flag, no value)_ |
+| `-sc`, `--sourceCluster` | Source cluster for set mapping (1-based ID or name) | `1` or `primary` |
 
 ### File & Output Options
 | Option (Short/Long) | Description | Example |
@@ -136,6 +138,7 @@ java -jar cluster-comparator.jar \
 | `-r`, `--rps` | Rate limit (requests per second) | `1000` |
 | `-l`, `--limit` | Maximum records per partition | `10000` |
 | `-rl`, `--recordLimit` | Maximum total records to process | `1000000` |
+| `-lbs`, `--lookupBatchSize` | Batch size for missing-record verification reads (default: 100) | `100` |
 | `-rcs`, `--remoteCacheSize` | Remote server cache size | `5000` |
 
 ### Remote Server Options
@@ -201,6 +204,28 @@ Used with `custom` and `scan_custom` actions. Specify per-cluster actions in the
 # Using cluster names
 --action custom --customActions primary:touch,replica:delete
 ```
+
+### Date Range Verification of Missing Records
+
+When `--beginDate` and/or `--endDate` is specified, all clusters are scanned with the date filter. If a record is found on some clusters but not others, it may simply exist outside the date range on the "missing" clusters rather than being truly absent.
+
+By default, the comparator automatically verifies this: missing records are re-read from the other clusters **without** the date filter. If the record is found, it is compared normally. If it truly does not exist, it is reported as missing.
+
+This behavior can be disabled with `--skipDateRangeVerify` to get the old behavior (immediately report as missing without follow-up reads).
+
+```bash
+# Compare records modified since a specific date, verifying missing records
+java -jar cluster-comparator.jar \
+  --hosts1 primary:3000 --hosts2 replica:3000 \
+  --namespaces production \
+  --action scan \
+  --compareMode MISSING_RECORDS \
+  --beginDate "2026/02/17-00:00:00Z" \
+  --file recent-differences.csv \
+  --console
+```
+
+**Batch tuning:** Use `--lookupBatchSize` (default: 100) to control how many missing records are accumulated before performing a batch read on the clusters where they were not found. All records in a batch target the same server node (same partition). When record content is not needed (e.g., `MISSING_RECORDS` mode), `batch exists` is used instead of `batch get` to minimize network traffic.
 
 ## 🔍 Comparison Mode Reference
 

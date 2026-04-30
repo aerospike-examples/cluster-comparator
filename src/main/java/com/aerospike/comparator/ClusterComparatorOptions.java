@@ -119,6 +119,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     private List<Integer> partitionList = null;
     private Map<Integer, CustomActions> customActions;
     private boolean skipChallenge = false;
+    private int lookupBatchSize = 100;
+    private boolean skipDateRangeVerify = false;
+    private int sourceCluster = -1;
     
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -332,8 +335,19 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         options.addOption(null, "binsOnly", false, "When using RECORDS_DIFFERENT or RECORD_DIFFERENCES, do not list the full differences, just the bin names which are different");
         options.addOption(null, "showMetadata", false, "Output cluster metadata (Last update time, record size) on cluster differences. This will require an additional read which will impact performance");
         options.addOption("pl", "partitionList", true, "Specify a list of partitions to scan. If this argument is specified, neither the beginPartition nor the endPartition argument can be specified");
-//        options.addOption(null, "masterCluster", true, "Sets one cluster to be the master for the sake of comparison. If this flag is set, the date range filter must be specified (beginDate and/or endDate) "
-//                + "and this date range will apply only to the master cluster. ");
+        options.addOption("lbs", "lookupBatchSize", true,
+                "Number of records to accumulate before performing a batch read on clusters where the "
+                + "record was not found. Used by date range verification and set mapping modes. All "
+                + "records in a batch target the same server node (same partition). (Default: 100)");
+        options.addOption("sdv", "skipDateRangeVerify", false,
+                "When set, records missing from some clusters during a date-filtered scan are reported "
+                + "immediately without verifying whether they exist outside the date range on the missing "
+                + "clusters. By default (without this flag), missing records are re-read without the date "
+                + "filter to distinguish truly missing records from those outside the time window.");
+        options.addOption("sc", "sourceCluster", true,
+                "The cluster ID (1-based) or name to use as the source for set mapping comparisons. "
+                + "This cluster is scanned; records are looked up on other clusters using mapped set names. "
+                + "Required when set mapping is configured.");
         return options;
     }
 
@@ -429,6 +443,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
 
         if (!hasErrors && this.configOptions != null) {
             configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
+            if (configError == null) {
+                configError = this.configOptions.resolveSetMappingClusterNamesAndValidate(this);
+            }
         }
         if (this.masterCluster >= 0) {
             this.showMetadata = true;
@@ -515,6 +532,19 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             else if ((this.action == Action.CUSTOM || this.action == Action.SCAN_CUSTOM) && !validateCustomClusterOrdinals()) {
                 System.out.println("Aborting due to invalid custom actions cluster configuration");
             }
+            else if (this.lookupBatchSize < 1) {
+                System.out.println("--lookupBatchSize must be >= 1, not " + this.lookupBatchSize);
+            }
+            else if (this.hasSetMapping() && !this.hasSourceCluster()) {
+                System.out.println("Set mapping requires --sourceCluster to identify which cluster to scan");
+            }
+            else if (this.hasSourceCluster() && !isClusterIdValid(this.sourceCluster)) {
+                System.out.printf("Invalid --sourceCluster: %d. Must be in the range 1->%d\n",
+                        this.sourceCluster + 1, this.getNumberOfClusters());
+            }
+            else if (this.hasSourceCluster() && this.isQuickCompare()) {
+                System.out.println("--sourceCluster cannot be used with QUICK_NAMESPACE compare mode");
+            }
             else {
                 valid = !hasErrors;
             }
@@ -540,6 +570,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         }
         return true;
     }
+
     private void loadConfig(String fileName) throws Exception {
         ObjectMapper mapper = YAMLMapper.builder().enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS).build();
         mapper.findAndRegisterModules();
@@ -667,6 +698,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         this.masterCluster = Integer.parseInt(cl.getOptionValue("masterCluster", "-1"));
         this.customActions = parseCustomActions(cl.getOptionValue("customActions"));
         this.skipChallenge = cl.hasOption("skipChallenge");
+        this.lookupBatchSize = Integer.parseInt(cl.getOptionValue("lookupBatchSize", "100"));
+        this.skipDateRangeVerify = cl.hasOption("skipDateRangeVerify");
+        this.sourceCluster = parseSourceCluster(cl.getOptionValue("sourceCluster"));
         
         this.validate(options, cl);
     }
@@ -698,6 +732,50 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             result.put(clusterOrdinal, CustomActions.valueOf(action));
         }
         return result;
+    }
+
+    public int getLookupBatchSize() {
+        return lookupBatchSize;
+    }
+
+    /**
+     * Returns true when date filtering is active and missing records should be
+     * verified by re-reading them without the date filter.
+     */
+    public boolean isDateRangeVerify() {
+        return (this.beginDate != null || this.endDate != null) && !this.skipDateRangeVerify;
+    }
+
+    public int getSourceCluster() {
+        return sourceCluster;
+    }
+
+    public boolean hasSourceCluster() {
+        return sourceCluster >= 0;
+    }
+
+    private int parseSourceCluster(String param) {
+        if (param == null || param.isEmpty()) {
+            return -1;
+        }
+        String trimmed = param.trim();
+        if (trimmed.matches("\\d+")) {
+            return Integer.parseInt(trimmed) - 1;
+        }
+        else {
+            return clusterNameToId(trimmed);
+        }
+    }
+
+    public String getSetName(String sourceSet, int clusterOrdinal) {
+        if (this.configOptions == null) {
+            return sourceSet;
+        }
+        return this.configOptions.getSet(sourceSet, clusterOrdinal);
+    }
+
+    public boolean hasSetMapping() {
+        return this.configOptions != null && this.configOptions.hasSetMapping();
     }
 
     @Override

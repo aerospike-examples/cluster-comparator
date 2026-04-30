@@ -9,6 +9,7 @@ import java.util.Map;
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
+import com.aerospike.client.policy.BatchPolicy;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.QueryPolicy;
 import com.aerospike.client.policy.TlsPolicy;
@@ -143,6 +144,64 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             RemoteUtils.sendPolicy(policy, conn.getDos());
             RemoteUtils.sendKey(key, conn.getDos());
             return RemoteUtils.readRecord(conn.getDis());
+        }
+        catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
+        }
+    }
+
+    @Override
+    public boolean[] exists(BatchPolicy policy, Key[] keys) {
+        Connection conn = null;
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_BATCH_EXISTS);
+            RemoteUtils.sendPolicy(policy, conn.getDos());
+            conn.getDos().writeInt(keys.length);
+            for (Key key : keys) {
+                RemoteUtils.sendKey(key, conn.getDos());
+            }
+            int count = conn.getDis().readInt();
+            boolean[] results = new boolean[count];
+            for (int i = 0; i < count; i++) {
+                results[i] = conn.getDis().readBoolean();
+            }
+            return results;
+        }
+        catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
+        }
+    }
+
+    @Override
+    public Record[] get(BatchPolicy policy, Key[] keys) {
+        Connection conn = null;
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_BATCH_GET);
+            RemoteUtils.sendPolicy(policy, conn.getDos());
+            conn.getDos().writeInt(keys.length);
+            for (Key key : keys) {
+                RemoteUtils.sendKey(key, conn.getDos());
+            }
+            int count = conn.getDis().readInt();
+            Record[] records = new Record[count];
+            for (int i = 0; i < count; i++) {
+                records[i] = RemoteUtils.readRecord(conn.getDis());
+            }
+            return records;
         }
         catch (IOException ioe) {
             RemoteUtils.handleIOException(ioe);

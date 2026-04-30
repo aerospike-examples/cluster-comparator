@@ -332,6 +332,17 @@ Available for all modes except `QUICK_NAMESPACE`:
 --beginDate 1771833600000  # Milliseconds since epoch (2026-02-17)
 ```
 
+#### Missing Record Verification
+
+When a date filter is active and a record is found on some clusters but not others, the record may exist on the "missing" clusters but outside the specified date range. By default, the comparator automatically re-reads such records from the missing clusters without the date filter to determine if they truly do not exist or were simply filtered out.
+
+- If the record is found on the follow-up read, it is compared normally.
+- If the record is truly absent, it is reported as missing.
+
+This avoids false "missing" reports when records exist on all clusters but were last updated at different times.
+
+To disable this behavior and report missing records immediately (the old behavior), use `--skipDateRangeVerify`.
+
 ### Rate Limiting
 ```bash
 # Limit requests per second to avoid overloading clusters

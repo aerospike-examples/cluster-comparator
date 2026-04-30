@@ -13,6 +13,7 @@ import com.aerospike.client.Info;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.cluster.Node;
+import com.aerospike.client.policy.BatchPolicy;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.QueryPolicy;
 import com.aerospike.client.policy.WritePolicy;
@@ -48,6 +49,16 @@ public class LocalAerospikeClient implements AerospikeClientAccess {
     @Override
     public Record get(Policy policy, Key key) {
         return this.client.get(policy, key);
+    }
+
+    @Override
+    public boolean[] exists(BatchPolicy policy, Key[] keys) {
+        return this.client.exists(policy, keys);
+    }
+
+    @Override
+    public Record[] get(BatchPolicy policy, Key[] keys) {
+        return this.client.get(policy, keys);
     }
 
     @Override

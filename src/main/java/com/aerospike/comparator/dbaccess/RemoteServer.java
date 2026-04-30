@@ -16,6 +16,7 @@ import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.exp.Expression;
+import com.aerospike.client.policy.BatchPolicy;
 import com.aerospike.client.policy.QueryPolicy;
 import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.policy.WritePolicy;
@@ -42,6 +43,8 @@ public class RemoteServer {
     public static final int CMD_RS_MULTI_RECORD_HASH = 14;
     public static final int CMD_RS_MULTI_KEY_ONLY = 15;
     public static final int CMD_CONFIG = 16;
+    public static final int CMD_BATCH_EXISTS = 20;
+    public static final int CMD_BATCH_GET = 21;
     
     private final boolean debug;
     private final boolean verbose;
@@ -399,6 +402,36 @@ public class RemoteServer {
             dos.writeUTF(client.invokeInfoCommandOnANode(command));
         }
         
+        private void doBatchExists() throws IOException {
+            BatchPolicy policy = new BatchPolicy();
+            policy = (BatchPolicy) RemoteUtils.readPolicy(policy, dis);
+            int count = dis.readInt();
+            Key[] keys = new Key[count];
+            for (int i = 0; i < count; i++) {
+                keys[i] = RemoteUtils.readKey(dis);
+            }
+            boolean[] results = client.exists(policy, keys);
+            dos.writeInt(results.length);
+            for (boolean exists : results) {
+                dos.writeBoolean(exists);
+            }
+        }
+
+        private void doBatchGet() throws IOException {
+            BatchPolicy policy = new BatchPolicy();
+            policy = (BatchPolicy) RemoteUtils.readPolicy(policy, dis);
+            int count = dis.readInt();
+            Key[] keys = new Key[count];
+            for (int i = 0; i < count; i++) {
+                keys[i] = RemoteUtils.readKey(dis);
+            }
+            Record[] records = client.get(policy, keys);
+            dos.writeInt(records.length);
+            for (Record record : records) {
+                RemoteUtils.sendRecord(record, dos);
+            }
+        }
+
         private void doGetNodeNames() throws IOException {
             List<String> nodeNames = client.getNodeNames();
             dos.writeInt(nodeNames.size());
@@ -456,6 +489,15 @@ public class RemoteServer {
                         break;
                     case CMD_GET_NODE_NAMES:
                         doGetNodeNames();
+                        break;
+
+                    case CMD_BATCH_EXISTS:
+                        doBatchExists();
+                        break;
+
+                    case CMD_BATCH_GET:
+                        doBatchGet();
+                        break;
                     }
                 }
                 catch (IOException ioe) {
