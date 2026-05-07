@@ -52,6 +52,7 @@ import com.aerospike.comparator.dbaccess.RecordMetadata;
 import com.aerospike.comparator.dbaccess.RecordSetAccess;
 import com.aerospike.comparator.dbaccess.RemoteAerospikeClient;
 import com.aerospike.comparator.dbaccess.RemoteServer;
+import com.aerospike.comparator.web.ProgressSnapshot;
 
 public class ClusterComparator {
 
@@ -1386,11 +1387,49 @@ public class ClusterComparator {
         return new DifferenceSummary(recordsMissingOnCluster, recordsDifferentCount.get());
     }
     
+    public ProgressSnapshot getProgressSnapshot() {
+        int partitionCount = endPartition - startPartition;
+        int completeCount = 0;
+        for (int i = 0; i < partitionCount; i++) {
+            if (partitionsComplete[i].get()) {
+                completeCount++;
+            }
+        }
+        long[] processedPerCluster = new long[numberOfClusters];
+        long[] missingPerCluster = new long[numberOfClusters];
+        for (int i = 0; i < numberOfClusters; i++) {
+            processedPerCluster[i] = recordsProcessedOnCluster.get(i);
+            missingPerCluster[i] = recordsMissingOnCluster.get(i);
+        }
+        return new ProgressSnapshot(
+                processedPerCluster,
+                missingPerCluster,
+                recordsDifferentCount.get(),
+                totalMissingRecords.get(),
+                totalRecordsCompared.get(),
+                completeCount,
+                partitionCount,
+                forceTerminate,
+                options.getOutputFileName()
+        );
+    }
+    
+    public void requestTermination() {
+        this.forceTerminate = true;
+    }
+    
+    public ClusterComparatorOptions getOptions() {
+        return this.options;
+    }
+    
     public static void main(String[] args) throws Exception {
         ClusterComparatorOptions options = new ClusterComparatorOptions(args);
-        
+        if (options.isWebInterface()) {
+            com.aerospike.comparator.web.WebServer webServer = new com.aerospike.comparator.web.WebServer(options);
+            webServer.start();
+            return;
+        }
         ClusterComparator comparator = new ClusterComparator(options);
         comparator.begin();
-        
     }
 }

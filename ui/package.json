@@ -1,0 +1,27 @@
+{
+  "name": "cluster-comparator-ui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:favicons": "cd public && npx --yes sharp-cli -i favicon-master.png -o favicon.png resize 192 192 && npx --yes sharp-cli -i favicon-master.png -o favicon-32.png resize 32 32 && npx --yes sharp-cli -i favicon-master.png -o apple-touch-icon.png resize 180 180",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.0.0",
+    "@mui/material": "^9.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0"
+  }
+}
