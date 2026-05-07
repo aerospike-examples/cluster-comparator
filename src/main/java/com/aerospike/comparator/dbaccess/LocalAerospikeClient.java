@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.AerospikeException.InvalidNode;
+import com.aerospike.client.Bin;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Info;
 import com.aerospike.client.Key;
@@ -33,6 +34,10 @@ public class LocalAerospikeClient implements AerospikeClientAccess {
         this.client.close();
     }
     
+    @Override
+    public void put(WritePolicy policy, Key key, Bin... bins) {
+        this.client.put(policy, key, bins);
+    }
     @Override
     public void touch(WritePolicy policy, Key key) {
         this.client.touch(policy, key);

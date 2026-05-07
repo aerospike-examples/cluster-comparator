@@ -13,6 +13,7 @@ import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
 
 import com.aerospike.client.AerospikeException;
+import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.exp.Expression;
@@ -42,6 +43,7 @@ public class RemoteServer {
     public static final int CMD_RS_MULTI_RECORD_HASH = 14;
     public static final int CMD_RS_MULTI_KEY_ONLY = 15;
     public static final int CMD_CONFIG = 16;
+    public static final int CMD_PUT = 20;
     
     private final boolean debug;
     private final boolean verbose;
@@ -341,6 +343,19 @@ public class RemoteServer {
             }
         }
         
+        private void doPut() throws IOException {
+            WritePolicy policy = new WritePolicy();
+            policy = (WritePolicy) RemoteUtils.readPolicy(policy, dis);
+            Key key = RemoteUtils.readKey(dis);
+            int binCount = dis.readInt();
+            Bin[] bins = new Bin[binCount];
+            for (int i = 0; i < binCount; i++) {
+                bins[i] = RemoteUtils.readBin(dis);
+            }
+            client.put(policy, key, bins);
+            dos.writeInt(0);
+        }
+
         private void doConfig() throws IOException {
             sortMaps = dis.readBoolean();
             dos.writeInt(0);
@@ -456,6 +471,10 @@ public class RemoteServer {
                         break;
                     case CMD_GET_NODE_NAMES:
                         doGetNodeNames();
+                        break;
+                    case CMD_PUT:
+                        doPut();
+                        break;
                     }
                 }
                 catch (IOException ioe) {

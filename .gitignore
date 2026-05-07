@@ -16,3 +16,10 @@ out/
 
 ## OS X
 .DS_Store
+
+## UI build tooling
+ui/node_modules/
+ui/node/
+
+## Local Aerospike server packages (large; do not commit)
+aerospike-server-*.tgz

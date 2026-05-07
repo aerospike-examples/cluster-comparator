@@ -19,6 +19,7 @@ import java.util.Map.Entry;
 
 import com.aerospike.client.AerospikeException;
 import com.aerospike.client.AerospikeException.InvalidNode;
+import com.aerospike.client.Bin;
 import com.aerospike.client.IAerospikeClient;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
@@ -129,6 +130,32 @@ public class RemoteUtils {
                 ((WritePolicy)policyToChange).durableDelete = durableDelete;
             }
             return policyToChange;
+        }
+    }
+
+    public static void sendBin(Bin bin, DataOutputStream dos) throws IOException {
+        dos.writeUTF(bin.name);
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+            oos.writeObject(bin.value.getObject());
+            bos.flush();
+            byte[] bytes = bos.toByteArray();
+            dos.writeInt(bytes.length);
+            dos.write(bytes);
+        }
+    }
+
+    public static Bin readBin(DataInputStream dis) throws IOException {
+        String name = dis.readUTF();
+        int length = dis.readInt();
+        byte[] bytes = dis.readNBytes(length);
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
+                ObjectInputStream ois = new ObjectInputStream(bis)) {
+            Object value = ois.readObject();
+            return new Bin(name, Value.get(value));
+        }
+        catch (ClassNotFoundException cnfe) {
+            throw new AerospikeException(cnfe);
         }
     }
 
