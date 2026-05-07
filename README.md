@@ -55,6 +55,7 @@ java -jar cluster-comparator.jar \
 | **[Architecture & Deployment](docs/architecture.md)** | Network architectures and deployment patterns |
 | **[Comparison Modes](docs/comparison-modes.md)** | Detailed explanation of all comparison modes |
 | **[Configuration](docs/configuration.md)** | Configuration files, path options, multi-cluster setup |
+| **[Web Interface](docs/web-ui.md)** | Optional browser-based UI for configuring and monitoring comparisons |
 | **[Troubleshooting & Performance](docs/troubleshooting.md)** | Common issues, optimization, and security |
 | **[Quick Reference](docs/reference.md)** | Command patterns, parameters, and examples |
 

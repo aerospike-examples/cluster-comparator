@@ -148,6 +148,14 @@ java -jar cluster-comparator.jar \
 | `-rst`, `--remoteServerTls` | TLS configuration for remote server | `'{"context":{"certChain":"server.pem"}}'` |
 | `-rsh`, `--remoteServerHashes` | Use hashed comparisons in remote mode | `true` |
 
+### Web Interface Options
+| Option (Short/Long) | Description | Example |
+|---------------------|-------------|---------|
+| `-wip`, `--webInterfacePort` | Start web UI on this port (1-65535) | `8085` |
+| `-wpw`, `--webPassword` | Password for web UI access | `mySecret` |
+
+See [Web Interface](web-ui.md) for full documentation on the UI, build process, and security options.
+
 ### Debug & Utility Options
 | Option (Short/Long) | Description | Example |
 |---------------------|-------------|---------|

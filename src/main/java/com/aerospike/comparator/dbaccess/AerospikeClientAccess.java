@@ -3,6 +3,7 @@ package com.aerospike.comparator.dbaccess;
 import java.util.List;
 import java.util.Map;
 
+import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.policy.BatchPolicy;
@@ -15,6 +16,7 @@ import com.aerospike.client.query.Statement;
 public interface AerospikeClientAccess {
     boolean isLocal();
     void close();
+    void put(WritePolicy policy, Key key, Bin... bins);
     void touch(WritePolicy policy, Key key);
     void delete(WritePolicy policy, Key key);
     boolean exists(Policy policy, Key key);

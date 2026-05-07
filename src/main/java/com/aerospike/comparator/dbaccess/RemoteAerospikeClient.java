@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.aerospike.client.AerospikeException;
+import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
 import com.aerospike.client.policy.BatchPolicy;
@@ -33,6 +34,17 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
         this.compareMode = options.getCompareMode();
         
         sendOptionsToServer(options);
+    }
+
+    /**
+     * Minimal constructor for ephemeral connections (test-connection, metadata queries, populate data).
+     * Does not send config to the remote server since these connections don't use queryPartitions.
+     */
+    public RemoteAerospikeClient(String host, int port, TlsPolicy tlsPolicy) throws IOException {
+        this.pool = new ConnectionPool(host, port, 1, tlsPolicy);
+        this.cacheSize = 0;
+        this.useHashes = false;
+        this.compareMode = CompareMode.MISSING_RECORDS;
     }
     
     private void sendOptionsToServer(ClusterComparatorOptions options) {
@@ -69,6 +81,31 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
                 this.pool.release(conn);
             }
             this.pool.close();
+        }
+    }
+
+    @Override
+    public void put(WritePolicy policy, Key key, Bin... bins) {
+        Connection conn = null;
+        try {
+            conn = this.pool.borrow();
+            conn.getDos().write(RemoteServer.CMD_PUT);
+            RemoteUtils.sendPolicy(policy, conn.getDos());
+            RemoteUtils.sendKey(key, conn.getDos());
+            conn.getDos().writeInt(bins.length);
+            for (Bin bin : bins) {
+                RemoteUtils.sendBin(bin, conn.getDos());
+            }
+            conn.getDis().readInt();
+        }
+        catch (IOException ioe) {
+            RemoteUtils.handleIOException(ioe);
+            throw new AerospikeException(ioe);
+        }
+        finally {
+            if (conn != null) {
+                this.pool.release(conn);
+            }
         }
     }
 

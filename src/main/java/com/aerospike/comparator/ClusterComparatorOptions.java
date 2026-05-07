@@ -119,10 +119,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     private List<Integer> partitionList = null;
     private Map<Integer, CustomActions> customActions;
     private boolean skipChallenge = false;
-    private int lookupBatchSize = 100;
-    private boolean skipDateRangeVerify = false;
-    private int sourceCluster = -1;
-    
+    private int webInterfacePort = -1;
+    private String webPassword = null;
+	private boolean skipDateRangeVerify = false;    
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
 
@@ -190,9 +189,13 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             TlsOptions policy = new TlsOptions();
             StringWithOffset stringData = new StringWithOffset(tlsOptions);
             if (stringData.isSymbol('{')) {
+                if (stringData.isSymbol('}', false)) {
+                    stringData.checkAndConsumeSymbol('}');
+                    return policy;
+                }
                 while (true) {
                     String key = stringData.getString();
-                    if (key != null) {
+                    if (key != null && !key.isEmpty()) {
                         stringData.checkAndConsumeSymbol(':');
                         String value = stringData.getString();
                         setPropertyOnTlsPolicy(policy, key, value);
@@ -339,14 +342,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 "Number of records to accumulate before performing a batch read on clusters where the "
                 + "record was not found. Used by date range verification and set mapping modes. All "
                 + "records in a batch target the same server node (same partition). (Default: 100)");
-        options.addOption("sdv", "skipDateRangeVerify", false,
                 "When set, records missing from some clusters during a date-filtered scan are reported "
                 + "immediately without verifying whether they exist outside the date range on the missing "
                 + "clusters. By default (without this flag), missing records are re-read without the date "
-                + "filter to distinguish truly missing records from those outside the time window.");
-        options.addOption("sc", "sourceCluster", true,
                 "The cluster ID (1-based) or name to use as the source for set mapping comparisons. "
-                + "This cluster is scanned; records are looked up on other clusters using mapped set names. "
                 + "Required when set mapping is configured.");
         return options;
     }
@@ -570,7 +569,95 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         }
         return true;
     }
-
+    
+    /**
+     * Run validation without System.exit, returning structured field-level errors.
+     * Used by the web UI to display errors inline.
+     */
+    public Map<String, String> validateAndCollectErrors() {
+        Map<String, String> errors = new HashMap<>();
+        if (this.configOptions != null) {
+            this.clusters = this.configOptions.getClusters();
+        }
+        if (this.clusters == null) {
+            this.clusters = new ArrayList<>();
+            ClusterConfig cluster = new ClusterConfig();
+            cluster.setAuthMode(getAuthMode1());
+            cluster.setClusterName(getClusterName1());
+            cluster.setHostName(getHosts1());
+            cluster.setPassword(getPassword1());
+            cluster.setUserName(getUserName1());
+            cluster.setUseServicesAlternate(isServicesAlternate1());
+            cluster.setTls(getTlsOptions1());
+            if (cluster.getHostName() != null && !cluster.getHostName().isEmpty()) {
+                this.clusters.add(cluster);
+            }
+            cluster = new ClusterConfig();
+            cluster.setAuthMode(getAuthMode2());
+            cluster.setClusterName(getClusterName2());
+            cluster.setHostName(getHosts2());
+            cluster.setPassword(getPassword2());
+            cluster.setUserName(getUserName2());
+            cluster.setUseServicesAlternate(isServicesAlternate2());
+            cluster.setTls(getTlsOptions2());
+            if (cluster.getHostName() != null && !cluster.getHostName().isEmpty()) {
+                this.clusters.add(cluster);
+            }
+        } else {
+            if (this.getHosts1() != null || this.getHosts2() != null) {
+                errors.put("hosts1", "Hosts are specified in the config file so they cannot be passed on the command line as well");
+            }
+        }
+        if (this.clusters != null) {
+            this.clusters.removeIf(c -> c.getHostName() == null || c.getHostName().trim().isEmpty());
+        }
+        if (this.clusters == null || this.clusters.size() < 2) {
+            errors.put("clusters", "At least 2 clusters with valid host addresses must be specified");
+        }
+        if (this.threads < 0) {
+            errors.put("threads", "threads must be >= 0, not " + this.threads);
+        }
+        if (this.startPartition < 0 || this.startPartition >= 4096) {
+            errors.put("startPartition", "startPartition must be >= 0 and < 4096, not " + this.startPartition);
+        }
+        if (this.endPartition < 0 || this.endPartition > 4096) {
+            errors.put("endPartition", "endPartition must be >= 0 and <= 4096, not " + this.endPartition);
+        }
+        if (this.endPartition <= this.startPartition) {
+            errors.put("endPartition", "endPartition must be > startPartition");
+        }
+        if (this.namespaces == null || this.namespaces.length == 0) {
+            errors.put("namespaces", "namespace(s) must be specified");
+        }
+        if (this.action != null && this.action.canUseOutputFile() &&
+                (this.action == Action.SCAN_ASK || this.action == Action.RERUN) &&
+                this.outputFileName == null) {
+            errors.put("file", "Action " + this.action + " requires an output file but none was provided");
+        }
+        if (this.action == Action.RERUN && this.compareMode == CompareMode.QUICK_NAMESPACE) {
+            errors.put("compareMode", "Re-running is not supported for QUICK_NAMESPACE compare mode");
+        }
+        if (this.rps < 0) {
+            errors.put("rps", "RPS must be >= 0, not " + this.rps);
+        }
+        if (this.missingRecordsLimit < 0) {
+            errors.put("limit", "Records limit must be >= 0, not " + this.missingRecordsLimit);
+        }
+        if (this.isQuickCompare() && this.setNames != null) {
+            errors.put("setNames", "Quick compare cannot be used in conjunction with sets");
+        }
+        if (this.endDate != null && this.beginDate != null && this.beginDate.compareTo(this.endDate) > 0) {
+            errors.put("beginDate", "Start date must be before the end date");
+        }
+        if ((this.endDate != null || this.beginDate != null) && this.isQuickCompare()) {
+            errors.put("beginDate", "Date ranges cannot be used with quick compare");
+        }
+        if (this.action != null && this.action.needsInputFile && this.inputFileName == null) {
+            errors.put("inputFile", "Action " + this.action + " requires an input file but none was provided");
+        }
+        return errors;
+    }
+    
     private void loadConfig(String fileName) throws Exception {
         ObjectMapper mapper = YAMLMapper.builder().enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS).build();
         mapper.findAndRegisterModules();
@@ -578,6 +665,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     }
     
     public ClusterComparatorOptions(String[] arguments) throws Exception {
+        this(arguments, false);
+    }
+    
+    public ClusterComparatorOptions(String[] arguments, boolean skipValidation) throws Exception {
         Options options = formOptions();
         CommandLineParser parser = new DefaultParser();
         CommandLine cl = null;
@@ -585,11 +676,14 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             cl = parser.parse(options, arguments, false);
         }
         catch (UnrecognizedOptionException uoe) {
+            if (skipValidation) {
+                throw new RuntimeException("Unrecognized option: " + uoe.getOption());
+            }
             System.out.println("Unrecognized option: " + uoe.getOption());
             usage(options);
         }
         
-        if (cl.hasOption("usage")) {
+        if (cl.hasOption("usage") && !skipValidation) {
             usage(options);
         }
         if (cl.hasOption("configFile")) {
@@ -597,7 +691,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         }
 
         this.silent = cl.hasOption("quiet");
-        this.threads = Integer.valueOf(cl.getOptionValue("threads", "1"));
+        this.threads = Integer.valueOf(cl.getOptionValue("threads", "0"));
         this.startPartition = Integer.valueOf(cl.getOptionValue("startPartition", "0"));
         this.endPartition = Integer.valueOf(cl.getOptionValue("endPartition", "4096"));
         if (cl.hasOption("namespaces")) {
@@ -698,11 +792,23 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         this.masterCluster = Integer.parseInt(cl.getOptionValue("masterCluster", "-1"));
         this.customActions = parseCustomActions(cl.getOptionValue("customActions"));
         this.skipChallenge = cl.hasOption("skipChallenge");
+        this.webInterfacePort = Integer.parseInt(cl.getOptionValue("webInterfacePort", "-1"));
+        this.webPassword = cl.getOptionValue("webPassword");
         this.lookupBatchSize = Integer.parseInt(cl.getOptionValue("lookupBatchSize", "100"));
         this.skipDateRangeVerify = cl.hasOption("skipDateRangeVerify");
         this.sourceCluster = parseSourceCluster(cl.getOptionValue("sourceCluster"));
         
-        this.validate(options, cl);
+        if (this.isWebInterface()) {
+            if (this.webInterfacePort < 1 || this.webInterfacePort > 65535) {
+                System.out.println("webInterfacePort must be between 1 and 65535, not " + this.webInterfacePort);
+                usage(options);
+            }
+            return;
+        }
+        
+        if (!skipValidation) {
+            this.validate(options, cl);
+        }
     }
     
     private Map<Integer, CustomActions> parseCustomActions(String param) {
@@ -1055,6 +1161,94 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     
     public boolean isSkipChallenge() {
         return skipChallenge;
+    }
+    
+    public int getWebInterfacePort() {
+        return webInterfacePort;
+    }
+    
+    public String getWebPassword() {
+        return webPassword;
+    }
+    
+    public boolean isWebInterface() {
+        return webInterfacePort > 0;
+    }
+    
+    /**
+     * Serialize the current options state to a Map for the REST API,
+     * so CLI-provided options can populate the UI.
+     */
+    public Map<String, Object> toOptionsMap() {
+        Map<String, Object> map = new HashMap<>();
+        List<Map<String, Object>> clustersList = new ArrayList<>();
+        Map<String, Object> c1 = new HashMap<>();
+        if (this.hosts1 != null) c1.put("hostName", this.hosts1);
+        if (this.clusterName1 != null) c1.put("clusterName", this.clusterName1);
+        if (this.userName1 != null) c1.put("userName", this.userName1);
+        if (this.password1 != null) c1.put("password", this.password1);
+        if (this.authMode1 != null) c1.put("authMode", this.authMode1.name());
+        c1.put("useServicesAlternate", this.servicesAlternate1);
+        clustersList.add(c1);
+        Map<String, Object> c2 = new HashMap<>();
+        if (this.hosts2 != null) c2.put("hostName", this.hosts2);
+        if (this.clusterName2 != null) c2.put("clusterName", this.clusterName2);
+        if (this.userName2 != null) c2.put("userName", this.userName2);
+        if (this.password2 != null) c2.put("password", this.password2);
+        if (this.authMode2 != null) c2.put("authMode", this.authMode2.name());
+        c2.put("useServicesAlternate", this.servicesAlternate2);
+        clustersList.add(c2);
+        map.put("clusters", clustersList);
+        if (this.namespaces != null) map.put("namespaces", String.join(",", this.namespaces));
+        if (this.setNames != null) map.put("setNames", String.join(",", this.setNames));
+        if (this.outputFileName != null) map.put("file", this.outputFileName);
+        if (this.inputFileName != null) map.put("inputFile", this.inputFileName);
+        map.put("threads", this.threads);
+        map.put("startPartition", this.startPartition);
+        map.put("endPartition", this.endPartition);
+        map.put("compareMode", this.compareMode.name());
+        map.put("action", this.action.name());
+        map.put("rps", this.rps);
+        map.put("limit", this.missingRecordsLimit);
+        map.put("recordLimit", this.recordCompareLimit);
+        map.put("quiet", this.silent);
+        map.put("console", this.console);
+        map.put("verbose", this.verbose);
+        map.put("debug", this.debug);
+        map.put("metadataCompare", this.metadataCompare);
+        map.put("binsOnly", this.binsOnly);
+        map.put("showMetadata", this.showMetadata);
+        map.put("sortMaps", this.sortMaps);
+        if (this.beginDate != null) map.put("beginDate", String.valueOf(this.beginDate.getTime()));
+        if (this.endDate != null) map.put("endDate", String.valueOf(this.endDate.getTime()));
+        return map;
+    }
+    
+    /**
+     * Validate an options map from the UI. Converts the map to CLI args,
+     * constructs a ClusterComparatorOptions, and returns any validation errors.
+     */
+    public static List<String> validateOptionsMap(Map<String, Object> optionsMap) {
+        List<String> errors = new ArrayList<>();
+        List<String> args = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : optionsMap.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (value instanceof Boolean) {
+                if ((Boolean) value) {
+                    args.add("--" + key);
+                }
+            } else {
+                args.add("--" + key);
+                args.add(String.valueOf(value));
+            }
+        }
+        try {
+            new ClusterComparatorOptions(args.toArray(new String[0]));
+        } catch (Exception e) {
+            errors.add(e.getMessage());
+        }
+        return errors;
     }
     
     public boolean isDateInRange(long timestamp) {

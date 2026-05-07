@@ -11,6 +11,7 @@
   		<jackson-dataformat-yaml.version>2.14.2</jackson-dataformat-yaml.version>
 		<junit-jupiter.version>5.9.2</junit-jupiter.version>
 		<commons-cli.version>1.4</commons-cli.version>
+		<javalin.version>6.7.0</javalin.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 	</properties>
@@ -45,6 +46,16 @@
 		    <groupId>io.github.hakky54</groupId>
 		    <artifactId>sslcontext-kickstart-for-pem</artifactId>
 		    <version>8.1.1</version>
+		</dependency>
+		<dependency>
+		    <groupId>io.javalin</groupId>
+		    <artifactId>javalin</artifactId>
+		    <version>${javalin.version}</version>
+		</dependency>
+		<dependency>
+		    <groupId>org.slf4j</groupId>
+		    <artifactId>slf4j-simple</artifactId>
+		    <version>2.0.9</version>
 		</dependency>
   </dependencies>
 	<build>
@@ -106,7 +117,60 @@
 					<include>**/*.xml</include>
 				</includes>
 			</resource>
+			<resource>
+				<directory>${project.basedir}/src/main/resources</directory>
+				<includes>
+					<include>**/*</include>
+				</includes>
+			</resource>
 		</resources>
 	</build>
+
+	<profiles>
+		<profile>
+			<id>build-ui</id>
+			<activation>
+				<property>
+					<name>!skipUi</name>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>com.github.eirslett</groupId>
+						<artifactId>frontend-maven-plugin</artifactId>
+						<version>1.15.1</version>
+						<configuration>
+							<workingDirectory>${project.basedir}/ui</workingDirectory>
+						</configuration>
+						<executions>
+							<execution>
+								<id>install-node-and-npm</id>
+								<goals><goal>install-node-and-npm</goal></goals>
+								<configuration>
+									<nodeVersion>v20.11.0</nodeVersion>
+								</configuration>
+							</execution>
+							<execution>
+								<id>npm-install</id>
+								<goals><goal>npm</goal></goals>
+								<configuration>
+									<arguments>install</arguments>
+								</configuration>
+							</execution>
+							<execution>
+								<id>npm-build</id>
+								<goals><goal>npm</goal></goals>
+								<phase>generate-resources</phase>
+								<configuration>
+									<arguments>run build</arguments>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>
