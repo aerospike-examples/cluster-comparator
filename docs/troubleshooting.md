@@ -311,7 +311,7 @@ Before any destructive operations:
 ```bash
 # Progress output format:
 # 1000ms: [0-4096, remaining 3456, complete:[0-100,200-300]], active threads: 4, 
-# records processed: {cluster1: 12,345, cluster2: 12,340} 
+# records scanned: {cluster1: 12,345, cluster2: 12,340} 
 # throughput: {last second: 1,200 rps, overall: 1,100 rps}
 ```
 

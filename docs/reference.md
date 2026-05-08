@@ -235,6 +235,8 @@ java -jar cluster-comparator.jar \
 
 **Batch tuning:** Use `--lookupBatchSize` (default: 100) to control how many missing records are accumulated before performing a batch read on the clusters where they were not found. All records in a batch target the same server node (same partition). When record content is not needed (e.g., `MISSING_RECORDS` mode), `batch exists` is used instead of `batch get` to minimize network traffic.
 
+Periodic console progress lines label per-cluster totals as **records scanned** (see [Troubleshooting — Output interpretation](troubleshooting.md#output-interpretation)).
+
 ## 🔍 Comparison Mode Reference
 
 | Mode | Speed | Network | Detail | Best For |

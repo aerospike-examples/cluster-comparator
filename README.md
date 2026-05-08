@@ -28,6 +28,7 @@ java -jar cluster-comparator.jar \
 | **Verify Data Integrity** | `--action scan --compareMode RECORDS_DIFFERENT` | Detects content differences |
 | **Detailed Differences** | `--action scan --compareMode RECORD_DIFFERENCES` | Shows specific field differences |
 | **Fix Missing Data** | `--action scan_touch` | Automatically touch missing records |
+| **Time-filtered scan** | `--beginDate "…" [--endDate "…"]` | Compare only records updated in a window; see [Use Cases § 8](docs/use-cases.md#8-validate-recent-xdr-replication) |
 
 ### Essential Parameters
 ```bash
@@ -47,7 +48,7 @@ java -jar cluster-comparator.jar \
 --file differences.csv --console
 ```
 
-## 📚 Documentation
+Time-filtered comparisons add `--beginDate` and optionally `--endDate`; see [Validate Recent XDR Replication](docs/use-cases.md#8-validate-recent-xdr-replication) and the **Time Range** row in [Quick Reference](docs/reference.md).
 
 | Document | Description |
 |----------|-------------|

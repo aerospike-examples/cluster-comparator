@@ -97,6 +97,8 @@ Configure one or more clusters to compare. Each cluster is shown as a collapsibl
 
 Click **Add Cluster** to compare more than two clusters.
 
+![Connections Tab Screenshot](../images/ClusterComparatorUI-connectionsTab.png)
+
 ### Comparison Tab
 
 Configure comparison parameters:
@@ -110,25 +112,49 @@ Configure comparison parameters:
 
 All fields include tooltip help accessible via the info icon.
 
+![Connections Tab Screenshot](../images/ClusterComparatorUI-comparisonTab.png)
+
+### Starting a comparison (scan actions and output file)
+
+If **Action** is `SCAN` or any value starting with `SCAN_` (for example `SCAN_TOUCH`, `SCAN_DELETE`, `SCAN_READ`) and the **Output file** field is empty, a dialog warns that these actions normally write results to a file. You can:
+
+- **Set output file** — Switches to the **Comparison** tab and focuses the **Output file** field so you can enter a path.
+- **Continue anyway** — Starts the run without an output file (differences are not written to disk).
+
+Closing the dialog without **Continue anyway** behaves like **Set output file** (Comparison tab, output field focused).
+
 ### Progress Tab
 
 Displays real-time comparison progress via Server-Sent Events:
 
 - Elapsed time, throughput (records/second)
 - Partition progress bar
-- Per-cluster record counts (processed and missing)
-- Total missing and different record counts
+- Per-cluster **Records Processed** and **Records Missing** — the per-cluster processed column counts records **scanned** on that cluster (same idea as `records scanned:` in console progress). It is separate from how many records were **fully compared** across clusters.
+- **Total Missing** and **Records Different** — aggregate difference counts
+
+When **date range filters** are enabled, the comparator may perform extra verification reads on records that looked missing within the range; per-cluster scan totals can grow beyond a naive “one pass per record” mental model, while the engine still tracks **records compared** separately (see **Results**).
 
 The elapsed timer stops when the run completes.
+
+**Note:** While a summary of the results will appear in the Progress tab (and Results tabe when complete), the full run output will only appear in the starting Java process. Things like exceptions encountered, which partitions are complete, etc, will only appear in the Java process for now.
 
 ### Results Tab
 
 Shows a history of all comparison runs since the JVM started:
 
 - Most recent run is expanded by default; older runs are collapsed.
-- Each entry shows: completion timestamp, status (Clusters Match / Differences Found / Error), record counts.
-- Expand any entry to see full details including per-cluster breakdown and output file path.
+- Each collapsed row shows the completion time, a status chip (**Clusters Match** / **Differences Found** / **Error**), and a short summary: total **compared**, plus missing and different counts when non-zero.
+- Expand any entry for full details: **Total Compared**, totals for missing/different, partition progress, **Output file** path, and the per-cluster **Records Processed** / **Records Missing** table.
 - Delete individual entries with the trash icon.
+
+### Web UI and advanced CLI options
+
+The Comparison tab covers the most common flags. The following are **not** exposed as form fields (they are not merged from the UI into every launch path the way core options are). Use **JVM command-line arguments** when starting with `--webInterfacePort`, a **`--configFile`** YAML, or CLI-only workflows:
+
+- `--skipDateRangeVerify`, `--lookupBatchSize` — date-range verification tuning (see [Configuration](configuration.md) and [Reference](reference.md))
+- YAML-only cluster layout — e.g. `setMapping`, `namespaceMapping`, `--sourceCluster` (see [Configuration](configuration.md) and [Use cases](use-cases.md))
+
+Options you pass on the JVM command line alongside `--webInterfacePort` are still **pre-populated** in the UI where supported (see [Pre-populating Options](#pre-populating-options)).
 
 ### Validation
 
