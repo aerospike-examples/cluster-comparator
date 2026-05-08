@@ -36,6 +36,7 @@ import com.aerospike.client.cluster.ClusterUtilities;
 import com.aerospike.client.cluster.Partition;
 import com.aerospike.client.exp.Exp;
 import com.aerospike.client.exp.Expression;
+import com.aerospike.client.policy.BatchPolicy;
 import com.aerospike.client.policy.ClientPolicy;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.QueryPolicy;
@@ -59,7 +60,6 @@ public class ClusterComparator {
     // TODO:
     // - Protobuf'ing binary fields
     // - Or msgpack
-    // - Ability to compare different sets (scan/batch comparator) Note: how to ensure it's not just a one-way comparison?
     
     private final int startPartition;
     private final int endPartition;
@@ -67,13 +67,13 @@ public class ClusterComparator {
     private final AtomicLongArray recordsMissingOnCluster;
     private final AtomicLong recordsDifferentCount = new AtomicLong();
     private final AtomicLong totalMissingRecords = new AtomicLong();
-    private final AtomicLong totalRecordsCompared = new AtomicLong();
+    final AtomicLong totalRecordsCompared = new AtomicLong();
     private final AtomicLong recordsRemaining = new AtomicLong();
-    private final AtomicBoolean[] partitionsComplete;
+    final AtomicBoolean[] partitionsComplete;
     
     private ExecutorService executor = null;
     private AtomicInteger activeThreads;
-    private volatile boolean forceTerminate = false;
+    volatile boolean forceTerminate = false;
     private final List<MissingRecordHandler> missingRecordHandlers = new ArrayList<>();
     private final List<RecordDifferenceHandler> recordDifferenceHandlers = new ArrayList<>();
     private final ClusterComparatorOptions options;
@@ -83,14 +83,39 @@ public class ClusterComparator {
     private Expression filterExpression = null;
     private final int numberOfClusters;
     
-//    private final Policy tolerantReadPolicy = new Policy();
-//    private final WritePolicy tolerantWritePolicy = new WritePolicy();
-    
     private QueryPolicy queryPolicyToUse;
     private Policy readPolicyToUse;
     private WritePolicy writePolicyToUse;
     private boolean hasDoneFirstDelete = false;
     private AtomicBoolean hasChallengeActive = new AtomicBoolean(false);
+
+    int getStartPartition() {
+        return startPartition;
+    }
+
+    int getNumberOfClusters() {
+        return numberOfClusters;
+    }
+
+    ClusterComparatorOptions getOptions() {
+        return options;
+    }
+
+    int getThreadsToUse() {
+        return threadsToUse;
+    }
+
+    Expression getFilterExpression() {
+        return filterExpression;
+    }
+
+    QueryPolicy getQueryPolicyToUse() {
+        return queryPolicyToUse;
+    }
+
+    Policy getReadPolicyToUse() {
+        return readPolicyToUse;
+    }
 
     private class InternalHandler implements MissingRecordHandler, RecordDifferenceHandler {
         private void checkDifferencesCount() {
@@ -347,7 +372,7 @@ public class ClusterComparator {
         return differences;
     }
     
-    private int compare(byte[] digest1, byte[] digest2) {
+    int compare(byte[] digest1, byte[] digest2) {
         if (digest1.length != digest2.length) {
             throw new IllegalArgumentException("Digest1 has a length of " + digest1.length + ", digest2 has a length of " + digest2.length);
         }
@@ -364,7 +389,7 @@ public class ClusterComparator {
         return 0;
     }
 
-    private void differentRecords(int partitionId, Key key, DifferenceCollection differences, List<Integer> clustersWithRecord, RecordMetadata[] recordMetadatas) {
+    void differentRecords(int partitionId, Key key, DifferenceCollection differences, List<Integer> clustersWithRecord, RecordMetadata[] recordMetadatas) {
         for (RecordDifferenceHandler thisHandler : recordDifferenceHandlers) {
             try {
                 thisHandler.handle(partitionId, key, differences, clustersWithRecord, recordMetadatas);
@@ -423,7 +448,7 @@ public class ClusterComparator {
         return true;
     }
     
-    private void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, 
+    void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, 
             boolean hasRecordLevelDifferences, int partitionId, Key keyMissing) {
         RecordMetadata[] recordMetadatas = getMetadata(clients, keyMissing, clustersWithoutRecord, null);
         if (!filterMissingRecordsByMasterId(recordMetadatas, clustersWithRecord, clustersWithoutRecord, keyMissing)) {
@@ -462,7 +487,7 @@ public class ClusterComparator {
         }
     }
     
-    private boolean getNextRecord(RecordSetAccess recordSet, int cluster) {
+    boolean getNextRecord(RecordSetAccess recordSet, int cluster) {
         boolean result = recordSet.next();
         if (result) {
             recordsProcessedOnCluster.incrementAndGet(cluster);
@@ -490,7 +515,7 @@ public class ClusterComparator {
         }
     }
     
-    private boolean anySideValid(boolean[] sidesValid) {
+    boolean anySideValid(boolean[] sidesValid) {
         for (boolean isValid: sidesValid) {
             if (isValid) {
                 return true;
@@ -510,7 +535,7 @@ public class ClusterComparator {
         
     }
     
-    private Key getKeyWithLargestDigest(Key[] keys) {
+    Key getKeyWithLargestDigest(Key[] keys) {
         if (keys.length == 1) {
             throw new IllegalArgumentException("Must pass at least two keys");
         }
@@ -532,7 +557,28 @@ public class ClusterComparator {
         return keyToReturn;
     }
     
+    private static class DeferredRecord {
+        final Key key;
+        final List<Integer> clustersWithRecord;
+        final List<Integer> clustersMissing;
+        final Record[] scannedRecords;
+        final boolean hasRecordLevelDifferences;
+
+        DeferredRecord(Key key, List<Integer> clustersWithRecord, List<Integer> clustersMissing,
+                Record[] scannedRecords, boolean hasRecordLevelDifferences) {
+            this.key = key;
+            this.clustersWithRecord = clustersWithRecord;
+            this.clustersMissing = clustersMissing;
+            this.scannedRecords = scannedRecords;
+            this.hasRecordLevelDifferences = hasRecordLevelDifferences;
+        }
+    }
+
     private void comparePartition(AerospikeClientAccess[] clients, String namespace, String setName, int partitionId) {
+        if (options.hasSetMapping()) {
+            new SourceDrivenPartitionComparator(this).comparePartition(clients, namespace, setName, partitionId);
+            return;
+        }
         QueryPolicy queryPolicy = new QueryPolicy(queryPolicyToUse);
         queryPolicy.maxConcurrentNodes = 1;
         queryPolicy.includeBinData = options.isRecordLevelCompare();
@@ -569,6 +615,9 @@ public class ClusterComparator {
         }
         
         RecordComparator comparator = new RecordComparator();
+        boolean dateRangeVerify = options.isDateRangeVerify();
+        int batchSize = options.getLookupBatchSize();
+        List<DeferredRecord> deferredBatch = dateRangeVerify ? new ArrayList<>(batchSize) : null;
 
         try {
             Key[] keys = new Key[clients.length];
@@ -612,19 +661,44 @@ public class ClusterComparator {
                 }
                 else {
                     boolean hasRecordLevelDifferences = false;
-                    // Need to compare the records with the maximum digest
                     if (options.isRecordLevelCompare()) {
-                        DifferenceCollection result = compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys);
+                        boolean deferringDateRangeVerify = dateRangeVerify && !clustersWithoutRecord.isEmpty();
+                        DifferenceCollection result = compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys,
+                                !deferringDateRangeVerify);
                         hasRecordLevelDifferences = result.hasDifferences();
                     }
-                    if (!clustersWithoutRecord.isEmpty())  {
-                        missingRecord(clients, clustersWithMaxDigest, clustersWithoutRecord, hasRecordLevelDifferences, partitionId, keyWithLargestDigest);
+                    if (!clustersWithoutRecord.isEmpty()) {
+                        if (dateRangeVerify) {
+                            Record[] captured = null;
+                            if (options.isRecordLevelCompare()) {
+                                captured = new Record[numberOfClusters];
+                                for (int cluster : clustersWithMaxDigest) {
+                                    captured[cluster] = recordSets[cluster].getRecord();
+                                }
+                            }
+                            deferredBatch.add(new DeferredRecord(keyWithLargestDigest,
+                                    new ArrayList<>(clustersWithMaxDigest),
+                                    new ArrayList<>(clustersWithoutRecord),
+                                    captured, hasRecordLevelDifferences));
+                            if (deferredBatch.size() >= batchSize) {
+                                flushDeferredBatch(clients, deferredBatch, comparator, partitionId);
+                                deferredBatch.clear();
+                            }
+                        }
+                        else {
+                            missingRecord(clients, clustersWithMaxDigest, clustersWithoutRecord, hasRecordLevelDifferences, partitionId, keyWithLargestDigest);
+                        }
                     }
                 }
                 for (int cluster : clustersWithMaxDigest) {
                     sidesValid[cluster] = getNextRecord(recordSets[cluster], cluster);
                 }
             }
+            if (dateRangeVerify && !deferredBatch.isEmpty() && !forceTerminate) {
+                flushDeferredBatch(clients, deferredBatch, comparator, partitionId);
+                deferredBatch.clear();
+            }
+            partitionsComplete[partitionId-startPartition].set(true);
         }
         finally {
             for (RecordSetAccess recordSet : recordSets) {
@@ -633,7 +707,186 @@ public class ClusterComparator {
                 }
                 catch (Exception ignored) {}
             }
-            partitionsComplete[partitionId-startPartition].set(true);
+        }
+    }
+
+    /**
+     * Process a batch of deferred records: re-read them from the clusters where they were
+     * missing (without the date filter) to determine if they truly don't exist or were just
+     * outside the scan's time range.
+     */
+    private void flushDeferredBatch(AerospikeClientAccess[] clients, List<DeferredRecord> batch,
+            RecordComparator comparator, int partitionId) {
+        boolean recordLevelCompare = options.isRecordLevelCompare();
+        BatchPolicy batchPolicy = new BatchPolicy(readPolicyToUse);
+
+        Record[][] lookupResults = new Record[numberOfClusters][];
+        boolean[][] existsResults = new boolean[numberOfClusters][];
+
+        batchReadMissingRecords(clients, batch, batchPolicy, recordLevelCompare, lookupResults, existsResults);
+        processDeferredResults(clients, batch, comparator, partitionId, recordLevelCompare, lookupResults, existsResults);
+    }
+
+    /**
+     * For each cluster, collect the keys of records that were "missing" from it during the
+     * date-filtered scan, and batch-read them without the date filter.
+     */
+    private void batchReadMissingRecords(AerospikeClientAccess[] clients, List<DeferredRecord> batch,
+            BatchPolicy batchPolicy, boolean recordLevelCompare,
+            Record[][] lookupResults, boolean[][] existsResults) {
+
+        for (int clusterIdx = 0; clusterIdx < numberOfClusters; clusterIdx++) {
+            List<Integer> indicesForThisCluster = collectDeferredIndicesForCluster(batch, clusterIdx);
+            if (indicesForThisCluster.isEmpty()) {
+                continue;
+            }
+
+            Key[] lookupKeys = buildLookupKeys(batch, indicesForThisCluster, clusterIdx);
+
+            if (recordLevelCompare) {
+                Record[] results = clients[clusterIdx].get(batchPolicy, lookupKeys);
+                lookupResults[clusterIdx] = scatterResultsIntoBatchArray(results, indicesForThisCluster, batch.size());
+            }
+            else {
+                boolean[] results = clients[clusterIdx].exists(batchPolicy, lookupKeys);
+                existsResults[clusterIdx] = scatterBoolResultsIntoBatchArray(results, indicesForThisCluster, batch.size());
+            }
+        }
+    }
+
+    private List<Integer> collectDeferredIndicesForCluster(List<DeferredRecord> batch, int clusterIdx) {
+        List<Integer> indices = new ArrayList<>();
+        for (int b = 0; b < batch.size(); b++) {
+            if (batch.get(b).clustersMissing.contains(clusterIdx)) {
+                indices.add(b);
+            }
+        }
+        return indices;
+    }
+
+    private Key[] buildLookupKeys(List<DeferredRecord> batch, List<Integer> batchIndices, int clusterIdx) {
+        Key[] keys = new Key[batchIndices.size()];
+        for (int k = 0; k < batchIndices.size(); k++) {
+            DeferredRecord dr = batch.get(batchIndices.get(k));
+            String resolvedNamespace = options.getNamespaceName(dr.key.namespace, clusterIdx);
+            keys[k] = new Key(resolvedNamespace, dr.key.digest, dr.key.setName, dr.key.userKey);
+        }
+        return keys;
+    }
+
+    /**
+     * Scatter compressed batch results back into a full-size array indexed by batch position.
+     * The batch API returns results only for the keys we sent; this maps them back to
+     * their original positions in the deferred batch.
+     */
+    private Record[] scatterResultsIntoBatchArray(Record[] results, List<Integer> batchIndices, int batchSize) {
+        Record[] scattered = new Record[batchSize];
+        for (int k = 0; k < batchIndices.size(); k++) {
+            scattered[batchIndices.get(k)] = results[k];
+        }
+        return scattered;
+    }
+
+    private boolean[] scatterBoolResultsIntoBatchArray(boolean[] results, List<Integer> batchIndices, int batchSize) {
+        boolean[] scattered = new boolean[batchSize];
+        for (int k = 0; k < batchIndices.size(); k++) {
+            scattered[batchIndices.get(k)] = results[k];
+        }
+        return scattered;
+    }
+
+    /**
+     * After the batch reads complete, determine for each deferred record whether it was
+     * actually found on the "missing" clusters, then compare or report accordingly.
+     */
+    private void processDeferredResults(AerospikeClientAccess[] clients, List<DeferredRecord> batch,
+            RecordComparator comparator, int partitionId, boolean recordLevelCompare,
+            Record[][] lookupResults, boolean[][] existsResults) {
+
+        for (int b = 0; b < batch.size(); b++) {
+            if (forceTerminate) break;
+            DeferredRecord dr = batch.get(b);
+
+            List<Integer> actualClustersWithRecord = new ArrayList<>(dr.clustersWithRecord);
+            List<Integer> actualClustersMissing = new ArrayList<>();
+
+            for (int clusterIdx : dr.clustersMissing) {
+                boolean found;
+                if (recordLevelCompare) {
+                    found = lookupResults[clusterIdx] != null && lookupResults[clusterIdx][b] != null;
+                }
+                else {
+                    found = existsResults[clusterIdx] != null && existsResults[clusterIdx][b];
+                }
+                if (found) {
+                    actualClustersWithRecord.add(clusterIdx);
+                }
+                else {
+                    actualClustersMissing.add(clusterIdx);
+                }
+            }
+
+            if (recordLevelCompare && actualClustersWithRecord.size() > 1) {
+                Record[] allRecords = assembleRecordsForComparison(dr, lookupResults, b);
+                compareDeferredRecords(comparator, partitionId, actualClustersWithRecord, clients, dr.key, allRecords);
+            }
+            else {
+                // Either non-record-level deferred reconcile, or record-level with at most one cluster
+                // holding the record after follow-up reads. compareDeferredRecords already counts when it runs.
+                long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+                if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
+                    forceTerminate = true;
+                }
+            }
+
+            if (!actualClustersMissing.isEmpty()) {
+                missingRecord(clients, actualClustersWithRecord, actualClustersMissing,
+                        dr.hasRecordLevelDifferences, partitionId, dr.key);
+            }
+        }
+    }
+
+    /**
+     * Combine the records captured during the scan (from clusters that had the record)
+     * with the records fetched in the follow-up batch read (from clusters that were missing it).
+     */
+    private Record[] assembleRecordsForComparison(DeferredRecord dr, Record[][] lookupResults, int batchIndex) {
+        Record[] allRecords = new Record[numberOfClusters];
+        if (dr.scannedRecords != null) {
+            System.arraycopy(dr.scannedRecords, 0, allRecords, 0, numberOfClusters);
+        }
+        for (int clusterIdx : dr.clustersMissing) {
+            if (lookupResults[clusterIdx] != null && lookupResults[clusterIdx][batchIndex] != null) {
+                allRecords[clusterIdx] = lookupResults[clusterIdx][batchIndex];
+            }
+        }
+        return allRecords;
+    }
+
+    private void compareDeferredRecords(RecordComparator comparator, int partitionId,
+            List<Integer> clustersWithRecord, AerospikeClientAccess[] clients, Key key, Record[] allRecords) {
+        DifferenceCollection compareResult = new DifferenceCollection(clustersWithRecord);
+        for (int i = 0; i < clustersWithRecord.size(); i++) {
+            for (int j = i + 1; j < clustersWithRecord.size(); j++) {
+                int left = clustersWithRecord.get(i);
+                int right = clustersWithRecord.get(j);
+                Record rec1 = allRecords[left];
+                Record rec2 = allRecords[right];
+                if (rec1 != null && rec2 != null) {
+                    DifferenceSet diffSet = comparator.compare(key, rec1, rec2,
+                            options.getPathOptions(),
+                            options.getCompareMode() == CompareMode.RECORDS_DIFFERENT, left, right);
+                    compareResult.add(diffSet);
+                }
+            }
+        }
+        if (compareResult.hasDifferences()) {
+            RecordMetadata[] recordMetadatas = getMetadata(clients, key, null, clustersWithRecord);
+            differentRecords(partitionId, key, compareResult, invertClusterList(clustersWithRecord), recordMetadatas);
+        }
+        long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+        if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
+            forceTerminate = true;
         }
     }
 
@@ -680,7 +933,7 @@ public class ClusterComparator {
      * @param clusterList
      * @return a list of all clusters in the comparison which are not in the clusterList param
      */
-    private List<Integer> invertClusterList(List<Integer> clusterList) {
+    List<Integer> invertClusterList(List<Integer> clusterList) {
         List<Integer> result = new ArrayList<>();
         for (int i = 0; i < numberOfClusters; i++) {
             if (!clusterList.contains(i)) {
@@ -689,7 +942,8 @@ public class ClusterComparator {
         }
         return result;
     }
-    private DifferenceCollection compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys) {
+    private DifferenceCollection compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys,
+            boolean countTowardTotalCompared) {
         DifferenceCollection compareResult = new DifferenceCollection(clustersToCompare);
         for (int i = 0; i < clustersToCompare.size(); i++) {
             for (int j = i+1; j < clustersToCompare.size(); j++) {
@@ -711,9 +965,11 @@ public class ClusterComparator {
                 differentRecords(partitionId, getFirstNonNull(keys), compareResult, invertClusterList(clustersToCompare), recordMetadatas);
 //            }
         }
-        long totalRecsCompared = totalRecordsCompared.incrementAndGet();
-        if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
-            forceTerminate = true;
+        if (countTowardTotalCompared) {
+            long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+            if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
+                forceTerminate = true;
+            }
         }
         return compareResult;
     }
@@ -777,7 +1033,7 @@ public class ClusterComparator {
         }
     }
     
-    private RecordMetadata[] getMetadata(AerospikeClientAccess[] clients, Key key, List<Integer> clustersToSkip, List<Integer> clustersToInclude) {
+    RecordMetadata[] getMetadata(AerospikeClientAccess[] clients, Key key, List<Integer> clustersToSkip, List<Integer> clustersToInclude) {
         RecordMetadata[] recordMetadatas = null;
         if (options.isShowMetadata() || options.getMasterCluster() >= 0) {
             recordMetadatas = new RecordMetadata[numberOfClusters];
@@ -1049,12 +1305,12 @@ public class ClusterComparator {
             long elapsedMilliseconds = now - startTime;
             if (!options.isSilent() && !hasChallengeActive.get()) {
                 if (options.getAction() != Action.RERUN) {
-                    System.out.printf("%,dms: [%d-%d, remaining %d, complete:%s], active threads: %d, records processed: {",
+                    System.out.printf("%,dms: [%d-%d, remaining %d, complete:%s], active threads: %d, records scanned: {",
                             (now-startTime), this.startPartition, this.endPartition, nextPartition, getPartitionsComplete(), activeThreads);
                 }
                 else {
                     long remaining = recordsRemaining.get();
-                    System.out.printf("%,dms: [buffer lines: %d%s], active threads: %d, records processed: {", 
+                    System.out.printf("%,dms: [buffer lines: %d%s], active threads: %d, records scanned: {", 
                             (now-startTime), remaining, remaining == FileLoadingProcessor.MAX_QUEUE_DEPTH ? "+" : "", activeThreads);
                 }
                 forEachCluster((i, c) -> System.out.printf("%s%s: %,d", i > 0 ? ", ": "" , options.clusterIdToName(i), currentRecordsForCluster[i]));
@@ -1416,10 +1672,6 @@ public class ClusterComparator {
     
     public void requestTermination() {
         this.forceTerminate = true;
-    }
-    
-    public ClusterComparatorOptions getOptions() {
-        return this.options;
     }
     
     public static void main(String[] args) throws Exception {

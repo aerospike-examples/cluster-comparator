@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { RefObject } from 'react';
 import {
   Paper, TextField, Select, MenuItem, FormControl, InputLabel,
   FormControlLabel, Switch, Tooltip, Typography, Divider,
@@ -17,6 +18,8 @@ interface ComparisonPanelProps {
   availableNamespaces?: string[];
   availableSets?: string[];
   onRefreshMetadata?: () => void;
+  /** When set, the output file field forwards this ref for programmatic focus (e.g. from App). */
+  outputFileInputRef?: RefObject<HTMLInputElement | null>;
 }
 
 function err(fieldErrors: Record<string, string> | undefined, key: string): { error?: boolean; helperText?: string } {
@@ -199,7 +202,7 @@ function DateRangeSection({ options, onChange, fieldErrors }: {
   );
 }
 
-export default function ComparisonPanel({ options, onChange, fieldErrors, availableNamespaces = [], availableSets = [], onRefreshMetadata }: ComparisonPanelProps) {
+export default function ComparisonPanel({ options, onChange, fieldErrors, availableNamespaces = [], availableSets = [], onRefreshMetadata, outputFileInputRef }: ComparisonPanelProps) {
   const nsValue = (options.namespaces as string || '').split(',').filter(Boolean);
   const setValue = (options.setNames as string || '').split(',').filter(Boolean);
 
@@ -376,6 +379,7 @@ export default function ComparisonPanel({ options, onChange, fieldErrors, availa
             value={(options.file as string) || ''}
             onChange={(e) => onChange('file', e.target.value)}
             placeholder="/path/to/output.csv"
+            inputRef={outputFileInputRef}
             {...err(fieldErrors, 'file')}
           />
         </Grid>

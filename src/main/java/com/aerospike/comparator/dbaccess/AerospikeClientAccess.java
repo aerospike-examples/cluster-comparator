@@ -6,6 +6,7 @@ import java.util.Map;
 import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 import com.aerospike.client.Record;
+import com.aerospike.client.policy.BatchPolicy;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.QueryPolicy;
 import com.aerospike.client.policy.WritePolicy;
@@ -20,6 +21,8 @@ public interface AerospikeClientAccess {
     void delete(WritePolicy policy, Key key);
     boolean exists(Policy policy, Key key);
     Record get(Policy policy, Key key);
+    boolean[] exists(BatchPolicy policy, Key[] keys);
+    Record[] get(BatchPolicy policy, Key[] keys);
     RecordMetadata getMetadata(WritePolicy policy, Key key);
     RecordSetAccess queryPartitions(QueryPolicy queryPolicy, Statement statement, PartitionFilter filter);
     

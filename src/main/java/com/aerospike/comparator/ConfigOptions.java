@@ -5,6 +5,7 @@ import java.util.List;
 public class ConfigOptions {
     private List<ClusterConfig> clusters;
     private List<NamespaceMapping> namespaceMapping;
+    private List<SetMapping> setMapping;
     private NetworkOptions network;
 
     public List<ClusterConfig> getClusters() {
@@ -22,7 +23,15 @@ public class ConfigOptions {
     public void setNamespaceMapping(List<NamespaceMapping> namespaceMapping) {
         this.namespaceMapping = namespaceMapping;
     }
-    
+
+    public List<SetMapping> getSetMapping() {
+        return setMapping;
+    }
+
+    public void setSetMapping(List<SetMapping> setMapping) {
+        this.setMapping = setMapping;
+    }
+
     public NetworkOptions getNetwork() {
         return network;
     }
@@ -91,6 +100,38 @@ public class ConfigOptions {
             }
         }
         return name;
+    }
+
+    public String resolveSetMappingClusterNamesAndValidate(ClusterNameResolver resolver) {
+        if (setMapping != null) {
+            for (int i = 0; i < this.setMapping.size(); i++) {
+                SetMapping thisMapping = this.setMapping.get(i);
+                String result = thisMapping.resolveSetMappingClusterNamesAndValidate(resolver, i);
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+        return null;
+    }
+
+    public String getSet(String name, int clusterOrdinal) {
+        if (setMapping != null) {
+            for (SetMapping thisMapping : this.setMapping) {
+                if (thisMapping.getSet().equals(name)) {
+                    for (SetMap thisMap : thisMapping.getMappings()) {
+                        if (thisMap.getInternalClusterIndex() == clusterOrdinal) {
+                            return thisMap.getName();
+                        }
+                    }
+                }
+            }
+        }
+        return name;
+    }
+
+    public boolean hasSetMapping() {
+        return setMapping != null && !setMapping.isEmpty();
     }
 
     public boolean isNamespaceNameOverridden(String name) {

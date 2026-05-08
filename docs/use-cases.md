@@ -176,7 +176,60 @@ java -jar cluster-comparator.jar \
 
 **Use case:** QUICK_NAMESPACE provides fastest validation for bulk load operations.
 
-### 8. **Firewall/Network Restricted Environments**
+### 8. **Validate Recent XDR Replication**
+*Scenario: You want to verify that records recently written to a primary cluster have been replicated to the replica.*
+
+```bash
+java -jar cluster-comparator.jar \
+  --hosts1 primary:3000 --hosts2 replica:3000 \
+  --namespaces production \
+  --action scan \
+  --compareMode MISSING_RECORDS \
+  --beginDate "2026/02/16-00:00:00Z" \
+  --file recent-replication.csv \
+  --console
+```
+
+**Why this works:** Both clusters are scanned for records modified since the begin date. If a record is found on one cluster but not the other within the date range, the tool automatically re-reads it from the missing cluster without the date filter. This distinguishes between records that truly don't exist on the other cluster (replication failure) and records that exist but were last updated outside the date range (normal). Only truly missing records are reported.
+
+**Tip:** Use `--skipDateRangeVerify` if you want to skip the follow-up reads and only see what records match the date range on each cluster independently.
+
+### 9. **Cross-Set Comparison**
+*Scenario: Data was migrated from set "users" on the primary cluster to set "accounts" on the replica cluster, and you need to verify completeness.*
+
+Create `set-mapping.yaml`:
+```yaml
+---
+clusters:
+- hostName: primary:3000
+  clusterName: primary
+- hostName: replica:3000
+  clusterName: replica
+
+setMapping:
+- set: users
+  mappings:
+  - clusterName: replica
+    name: accounts
+```
+
+```bash
+java -jar cluster-comparator.jar \
+  --configFile set-mapping.yaml \
+  --namespaces production \
+  --setNames users \
+  --action scan \
+  --compareMode MISSING_RECORDS \
+  --sourceCluster 1 \
+  --file cross-set-results.csv \
+  --console
+```
+
+**Why this works:** The tool scans set "users" on the source cluster (cluster 1), then for each record it reconstructs a key using the mapped set name "accounts" and looks it up on the replica via batch reads.
+
+**Important:** Cross-set comparison requires that the user key is stored on the source records (written with `sendKey = true`). Without the user key, a new digest cannot be computed for the mapped set name, and those records will be skipped with a warning.
+
+### 10. **Firewall/Network Restricted Environments**
 *Scenario: No single machine can reach both clusters.*
 
 **On machine with access to cluster1:**

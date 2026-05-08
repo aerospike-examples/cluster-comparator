@@ -3,6 +3,7 @@ import {
   ThemeProvider, createTheme, CssBaseline,
   AppBar, Toolbar, Typography, Container, Box,
   Tabs, Tab, Alert, Snackbar, Badge,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button,
 } from '@mui/material';
 import LoginPage from './components/LoginPage';
 import ConnectionPanel from './components/ConnectionPanel';
@@ -83,6 +84,8 @@ export default function App() {
   const [runHistory, setRunHistory] = useState<ProgressData[]>([]);
   const eventSourceRef = useRef<EventSource | null>(null);
   const prevStateRef = useRef<string>('IDLE');
+  const outputFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [noOutputFileDialogOpen, setNoOutputFileDialogOpen] = useState(false);
 
   useEffect(() => {
     checkAuthRequired().then((required) => {
@@ -148,9 +151,7 @@ export default function App() {
     if (startError) setStartError(null);
   }, [fieldErrors, startError]);
 
-  const handleStart = useCallback(async () => {
-    setFieldErrors(undefined);
-    setStartError(null);
+  const runStartComparison = useCallback(async () => {
     const result = await startComparison();
     if (result.error) {
       setStartError(result.error);
@@ -160,6 +161,32 @@ export default function App() {
       setRunState('RUNNING');
       setSnack({ msg: 'Comparison started', severity: 'success' });
     }
+  }, []);
+
+  const handleStart = useCallback(async () => {
+    setFieldErrors(undefined);
+    setStartError(null);
+    const action = String(options.action ?? 'SCAN').toUpperCase();
+    const isScanLike = action === 'SCAN' || action.startsWith('SCAN_');
+    const hasOutput = String(options.file ?? '').trim().length > 0;
+    if (isScanLike && !hasOutput) {
+      setNoOutputFileDialogOpen(true);
+      return;
+    }
+    await runStartComparison();
+  }, [options.action, options.file, runStartComparison]);
+
+  const handleNoOutputFileContinue = useCallback(async () => {
+    setNoOutputFileDialogOpen(false);
+    await runStartComparison();
+  }, [runStartComparison]);
+
+  const handleNoOutputFileGoBack = useCallback(() => {
+    setNoOutputFileDialogOpen(false);
+    setTab(1);
+    setTimeout(() => {
+      outputFileInputRef.current?.focus();
+    }, 150);
   }, []);
 
   const handleStop = useCallback(async () => {
@@ -243,6 +270,7 @@ export default function App() {
             availableNamespaces={availableNamespaces}
             availableSets={availableSets}
             onRefreshMetadata={() => refreshClusterMetadata(options)}
+            outputFileInputRef={outputFileInputRef}
           />
         </TabPanel>
         <TabPanel value={tab} index={2}>
@@ -252,6 +280,24 @@ export default function App() {
           <ResultsPanel history={runHistory} onDelete={handleDeleteHistory} />
         </TabPanel>
       </Container>
+      <Dialog open={noOutputFileDialogOpen} onClose={handleNoOutputFileGoBack} maxWidth="sm" fullWidth>
+        <DialogTitle>No output file</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Scan actions normally write differences to a CSV file. You have not set an output file path.
+            You can continue without a file (results will only appear in the console if enabled), or go back
+            to the Comparison tab to set the output file.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleNoOutputFileGoBack} variant="contained">
+            Set output file
+          </Button>
+          <Button onClick={() => { void handleNoOutputFileContinue(); }} color="warning">
+            Continue anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Snackbar
         open={!!snack}
         autoHideDuration={4000}

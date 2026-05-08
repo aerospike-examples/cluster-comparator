@@ -194,6 +194,68 @@ namespaceMapping:
     name: prod_app
 ```
 
+### Date Range Verification Batch Tuning
+
+When date filtering is active (`--beginDate`/`--endDate`), records that appear to be missing from some clusters are verified by re-reading them without the date filter. These follow-up reads are performed in batches controlled by `--lookupBatchSize`:
+
+```bash
+# Default: batch 100 records at a time
+--lookupBatchSize 100
+
+# Smaller batches for lower per-node impact
+--lookupBatchSize 25
+
+# Larger batches for high-throughput networks
+--lookupBatchSize 500
+```
+
+**Guidance:**
+- The default of 100 is appropriate because all records in a batch target the same server node (same partition).
+- Larger batch sizes reduce network round trips but increase per-node load.
+- When record content is not needed (e.g., `MISSING_RECORDS` mode), the tool uses `batch exists` instead of `batch get` to minimize network traffic.
+- Each partition thread manages its own batch buffer independently.
+- To disable verification entirely (report missing records immediately), use `--skipDateRangeVerify`.
+
+### Set Mapping
+
+When equivalent data exists in different sets across clusters (e.g., after a set rename during migration), use `setMapping` to tell the comparator how to resolve set names:
+
+```yaml
+---
+clusters:
+- hostName: primary:3000
+  clusterName: primary
+- hostName: replica:3000
+  clusterName: replica
+
+setMapping:
+- set: users
+  mappings:
+  - clusterName: replica
+    name: accounts
+```
+
+This means: when comparing set `users`, records on cluster `replica` should be looked up in set `accounts` instead.
+
+**Requirements:**
+- Set mapping requires `--sourceCluster` to identify which cluster to scan (the source side).
+- Source records **must** have the user key stored (written with `sendKey = true`). Without the user key, a new digest cannot be computed for the mapped set name and those records will be skipped.
+- Set mapping uses the same cluster identification as namespace mapping (either `clusterName` or `clusterIndex`).
+
+**Command example:**
+```bash
+java -jar cluster-comparator.jar \
+  --configFile set-mapping.yaml \
+  --namespaces production \
+  --setNames users \
+  --action scan \
+  --compareMode MISSING_RECORDS \
+  --sourceCluster 1 \
+  --console
+```
+
+Set mapping and namespace mapping can be combined in the same configuration file when both set names and namespace names differ across clusters.
+
 ### Configuration File Validation
 
 The tool validates configuration files and provides helpful error messages:

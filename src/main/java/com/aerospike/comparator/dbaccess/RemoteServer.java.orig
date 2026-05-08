@@ -44,9 +44,12 @@ public class RemoteServer {
     public static final int CMD_RS_MULTI_RECORD_HASH = 14;
     public static final int CMD_RS_MULTI_KEY_ONLY = 15;
     public static final int CMD_CONFIG = 16;
+<<<<<<< HEAD
     public static final int CMD_BATCH_EXISTS = 20;
     public static final int CMD_BATCH_GET = 21;
-    public static final int CMD_PUT = 22;
+=======
+    public static final int CMD_PUT = 20;
+>>>>>>> main
     
     private final boolean debug;
     private final boolean verbose;
@@ -505,6 +508,7 @@ public class RemoteServer {
                     case CMD_GET_NODE_NAMES:
                         doGetNodeNames();
                         break;
+<<<<<<< HEAD
 
                     case CMD_BATCH_EXISTS:
                         doBatchExists();
@@ -512,12 +516,11 @@ public class RemoteServer {
 
                     case CMD_BATCH_GET:
                         doBatchGet();
-                        break;
-						
+=======
                     case CMD_PUT:
                         doPut();
+>>>>>>> main
                         break;
-						
                     }
                 }
                 catch (IOException ioe) {
