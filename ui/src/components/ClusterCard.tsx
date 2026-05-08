@@ -8,6 +8,7 @@ import {
   Grid, LinearProgress,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import CableIcon from '@mui/icons-material/Cable';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -26,6 +27,14 @@ interface ClusterCardProps {
 }
 
 type ConnStatus = 'untested' | 'success' | 'error';
+
+function HelpTip({ text }: { text: string }) {
+  return (
+    <Tooltip title={text} arrow placement="top">
+      <InfoOutlinedIcon sx={{ fontSize: 16, color: 'action.active', ml: 0.5, verticalAlign: 'middle', cursor: 'help' }} />
+    </Tooltip>
+  );
+}
 
 export default function ClusterCard({ index, cluster, onChange, onRemove, canRemove, hostError }: ClusterCardProps) {
   const [connStatus, setConnStatus] = useState<ConnStatus>('untested');
@@ -259,41 +268,48 @@ export default function ClusterCard({ index, cluster, onChange, onRemove, canRem
         <DialogTitle>Populate Test Data</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Tooltip title="Target namespace for test records." arrow>
-              <TextField fullWidth label="Namespace" value={popNs} onChange={(e) => setPopNs(e.target.value)} />
-            </Tooltip>
-            <Tooltip title="Target set name for test records." arrow>
-              <TextField fullWidth label="Set" value={popSet} onChange={(e) => setPopSet(e.target.value)} />
-            </Tooltip>
-            <Tooltip title="Number of customer records (1–100000). User keys are the string customer- plus the decimal id for each id from Start Key through Start Key + Count − 1 (no leading zeros)." arrow>
-              <TextField
-                fullWidth label="Record Count" type="number"
-                value={popCount}
-                onChange={(e) => setPopCount(Math.max(1, Math.min(100000, Number(e.target.value) || 1)))}
-                slotProps={{ htmlInput: { min: 1, max: 100000 } }}
-              />
-            </Tooltip>
-            <Tooltip title="First numeric id in the user key. With Count 10 and Start Key 50, keys are customer-50 through customer-59 (same string form regardless of other batches)." arrow>
-              <TextField
-                fullWidth label="Start Key" type="number"
-                value={popStartKey}
-                onChange={(e) => setPopStartKey(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
-                slotProps={{ htmlInput: { min: 0 } }}
-              />
-            </Tooltip>
-            <Tooltip title="Constant: same bins for the same key on every run (use the same settings on each cluster for identical records). Random: varied bins each run." arrow>
-              <FormControl fullWidth size="small">
-                <InputLabel>Generation</InputLabel>
-                <Select
-                  label="Generation"
-                  value={popGenMode}
-                  onChange={(e) => setPopGenMode(e.target.value as 'random' | 'constant')}
-                >
-                  <MenuItem value="random">Random (differences)</MenuItem>
-                  <MenuItem value="constant">Constant (identical)</MenuItem>
-                </Select>
-              </FormControl>
-            </Tooltip>
+            <TextField
+              fullWidth
+              label={<>Namespace <HelpTip text="Target namespace for test records." /></>}
+              value={popNs}
+              onChange={(e) => setPopNs(e.target.value)}
+            />
+            <TextField
+              fullWidth
+              label={<>Set <HelpTip text="Target set name for test records." /></>}
+              value={popSet}
+              onChange={(e) => setPopSet(e.target.value)}
+            />
+            <TextField
+              fullWidth
+              label={<>Record Count <HelpTip text="Number of customer records (1–100000). User keys are the string customer- plus the decimal id for each id from Start Key through Start Key + Count − 1 (no leading zeros)." /></>}
+              type="number"
+              value={popCount}
+              onChange={(e) => setPopCount(Math.max(1, Math.min(100000, Number(e.target.value) || 1)))}
+              slotProps={{ htmlInput: { min: 1, max: 100000 } }}
+            />
+            <TextField
+              fullWidth
+              label={<>Start Key <HelpTip text="First numeric id in the user key. With Count 10 and Start Key 50, keys are customer-50 through customer-59 (same string form regardless of other batches)." /></>}
+              type="number"
+              value={popStartKey}
+              onChange={(e) => setPopStartKey(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
+              slotProps={{ htmlInput: { min: 0 } }}
+            />
+            <FormControl fullWidth size="small">
+              <InputLabel>Generation</InputLabel>
+              <Select
+                label="Generation"
+                value={popGenMode}
+                onChange={(e) => setPopGenMode(e.target.value as 'random' | 'constant')}
+                endAdornment={(
+                  <HelpTip text="Constant: same bins for the same key on every run (use the same settings on each cluster for identical records). Random: varied bins each run." />
+                )}
+              >
+                <MenuItem value="random">Random (differences)</MenuItem>
+                <MenuItem value="constant">Constant (identical)</MenuItem>
+              </Select>
+            </FormControl>
             {popLoading && popProgress && popProgress.total > 0 && (
               <Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>

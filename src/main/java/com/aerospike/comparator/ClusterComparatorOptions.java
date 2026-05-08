@@ -121,7 +121,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     private boolean skipChallenge = false;
     private int webInterfacePort = -1;
     private String webPassword = null;
-	private boolean skipDateRangeVerify = false;    
+    private int lookupBatchSize = 100;
+	private boolean skipDateRangeVerify = false;
+    private int sourceCluster = -1;
+    
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
 
@@ -342,11 +345,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 "Number of records to accumulate before performing a batch read on clusters where the "
                 + "record was not found. Used by date range verification and set mapping modes. All "
                 + "records in a batch target the same server node (same partition). (Default: 100)");
-                "When set, records missing from some clusters during a date-filtered scan are reported "
-                + "immediately without verifying whether they exist outside the date range on the missing "
-                + "clusters. By default (without this flag), missing records are re-read without the date "
-                "The cluster ID (1-based) or name to use as the source for set mapping comparisons. "
-                + "Required when set mapping is configured.");
+        options.addOption("wip", "webInterfacePort", true,
+                "Start a web interface on this port instead of running from the command line.");
+        options.addOption("wpw", "webPassword", true,
+                "Password required to access the web interface. If not set, no authentication is required.");
         return options;
     }
 

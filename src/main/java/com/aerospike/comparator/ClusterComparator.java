@@ -662,7 +662,9 @@ public class ClusterComparator {
                 else {
                     boolean hasRecordLevelDifferences = false;
                     if (options.isRecordLevelCompare()) {
-                        DifferenceCollection result = compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys);
+                        boolean deferringDateRangeVerify = dateRangeVerify && !clustersWithoutRecord.isEmpty();
+                        DifferenceCollection result = compareRecords(comparator, partitionId, clustersWithMaxDigest, clients, recordSets, keys,
+                                !deferringDateRangeVerify);
                         hasRecordLevelDifferences = result.hasDifferences();
                     }
                     if (!clustersWithoutRecord.isEmpty()) {
@@ -828,6 +830,14 @@ public class ClusterComparator {
                 Record[] allRecords = assembleRecordsForComparison(dr, lookupResults, b);
                 compareDeferredRecords(comparator, partitionId, actualClustersWithRecord, clients, dr.key, allRecords);
             }
+            else {
+                // Either non-record-level deferred reconcile, or record-level with at most one cluster
+                // holding the record after follow-up reads. compareDeferredRecords already counts when it runs.
+                long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+                if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
+                    forceTerminate = true;
+                }
+            }
 
             if (!actualClustersMissing.isEmpty()) {
                 missingRecord(clients, actualClustersWithRecord, actualClustersMissing,
@@ -932,7 +942,8 @@ public class ClusterComparator {
         }
         return result;
     }
-    private DifferenceCollection compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys) {
+    private DifferenceCollection compareRecords(RecordComparator comparator, int partitionId, List<Integer> clustersToCompare, AerospikeClientAccess[] clients, RecordSetAccess[] recordSets, Key[] keys,
+            boolean countTowardTotalCompared) {
         DifferenceCollection compareResult = new DifferenceCollection(clustersToCompare);
         for (int i = 0; i < clustersToCompare.size(); i++) {
             for (int j = i+1; j < clustersToCompare.size(); j++) {
@@ -954,9 +965,11 @@ public class ClusterComparator {
                 differentRecords(partitionId, getFirstNonNull(keys), compareResult, invertClusterList(clustersToCompare), recordMetadatas);
 //            }
         }
-        long totalRecsCompared = totalRecordsCompared.incrementAndGet();
-        if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
-            forceTerminate = true;
+        if (countTowardTotalCompared) {
+            long totalRecsCompared = totalRecordsCompared.incrementAndGet();
+            if (options.getRecordCompareLimit() > 0 && totalRecsCompared >= options.getRecordCompareLimit()) {
+                forceTerminate = true;
+            }
         }
         return compareResult;
     }
@@ -1292,12 +1305,12 @@ public class ClusterComparator {
             long elapsedMilliseconds = now - startTime;
             if (!options.isSilent() && !hasChallengeActive.get()) {
                 if (options.getAction() != Action.RERUN) {
-                    System.out.printf("%,dms: [%d-%d, remaining %d, complete:%s], active threads: %d, records processed: {",
+                    System.out.printf("%,dms: [%d-%d, remaining %d, complete:%s], active threads: %d, records scanned: {",
                             (now-startTime), this.startPartition, this.endPartition, nextPartition, getPartitionsComplete(), activeThreads);
                 }
                 else {
                     long remaining = recordsRemaining.get();
-                    System.out.printf("%,dms: [buffer lines: %d%s], active threads: %d, records processed: {", 
+                    System.out.printf("%,dms: [buffer lines: %d%s], active threads: %d, records scanned: {", 
                             (now-startTime), remaining, remaining == FileLoadingProcessor.MAX_QUEUE_DEPTH ? "+" : "", activeThreads);
                 }
                 forEachCluster((i, c) -> System.out.printf("%s%s: %,d", i > 0 ? ", ": "" , options.clusterIdToName(i), currentRecordsForCluster[i]));
@@ -1659,10 +1672,6 @@ public class ClusterComparator {
     
     public void requestTermination() {
         this.forceTerminate = true;
-    }
-    
-    public ClusterComparatorOptions getOptions() {
-        return this.options;
     }
     
     public static void main(String[] args) throws Exception {
