@@ -12,7 +12,7 @@
   		<!-- Note: This utility is used by people still running on JDK11, so do not upgrade to JUnit 6 yet -->
 		<junit-jupiter.version>5.14.2</junit-jupiter.version>
 		<commons-cli.version>1.4</commons-cli.version>
-		<javalin.version>6.7.0</javalin.version>
+		<javalin.version>7.2.2</javalin.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 	</properties>
