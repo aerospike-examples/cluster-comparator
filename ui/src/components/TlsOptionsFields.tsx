@@ -167,13 +167,13 @@ export default function TlsOptionsFields({ value, onChange }: TlsOptionsFieldsPr
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: -0.5 }}>
             The comparator loads PEM material with the
             {' '}
-            <Link href="https://github.com/Hakky54/sslcontext-kickstart" target="_blank" rel="noopener noreferrer">
-              sslcontext-kickstart
+            <Link href="https://github.com/Hakky54/ayza" target="_blank" rel="noopener noreferrer">
+              ayza
             </Link>
             {' '}
             PEM utilities (
-            <Link href="https://github.com/Hakky54/sslcontext-kickstart/tree/master/sslcontext-kickstart-for-pem" target="_blank" rel="noopener noreferrer">
-              sslcontext-kickstart-for-pem
+            <Link href="https://github.com/Hakky54/ayza/tree/master/ayza-for-pem" target="_blank" rel="noopener noreferrer">
+              ayza-for-pem
             </Link>
             ), not the JDK’s JKS keytool format.
           </Typography>
