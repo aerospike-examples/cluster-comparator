@@ -10,7 +10,7 @@
 		<aerospike-client.verion>10.1.0</aerospike-client.verion>
   		<jackson-dataformat-yaml.version>2.22.1</jackson-dataformat-yaml.version>
   		<!-- Note: This utility is used by people still running on JDK11, so do not upgrade to JUnit 6 yet -->
-		<junit-jupiter.version>5.14.2</junit-jupiter.version>
+		<junit-jupiter.version>6.1.2</junit-jupiter.version>
 		<commons-cli.version>1.4</commons-cli.version>
 		<javalin.version>6.7.0</javalin.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
