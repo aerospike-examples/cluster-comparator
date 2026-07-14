@@ -134,7 +134,7 @@ java -jar cluster-comparator.jar \
 ### Performance & Limits Options  
 | Option (Short/Long) | Description | Example |
 |---------------------|-------------|---------|
-| `-t`, `--threads` | Number of threads (0 = auto-detect) | `0` |
+| `-t`, `--threads` | Number of threads (`0` = auto, capped at 32; `-1` = all CPU cores) | `0` |
 | `-r`, `--rps` | Rate limit (requests per second) | `1000` |
 | `-l`, `--limit` | Maximum records per partition | `10000` |
 | `-rl`, `--recordLimit` | Maximum total records to process | `1000000` |
@@ -171,7 +171,7 @@ See [Web Interface](web-ui.md) for full documentation on the UI, build process, 
 | **Connection** | `-h1`, `-h2` / `--hosts1`, `--hosts2` | `cluster1.com:3000` |
 | **Authentication** | `-U1`, `-P1` / `--user1`, `--password1` | `admin`, `secret123` |
 | **Scope** | `-n`, `-s` / `--namespaces`, `--setNames` | `prod,staging`, `users,cache` |
-| **Performance** | `-t`, `-r` / `--threads`, `--rps` | `0` (auto), `1000` |
+| **Performance** | `-t`, `-r` / `--threads`, `--rps` | `0` (auto, max 32), `1000` |
 | **Time Range** | `-db`, `-de` / `--beginDate`, `--endDate` | `2026/02/17-00:00:00Z` |
 | **Limits** | `-l`, `-rl` / `--limit`, `--recordLimit` | `10000`, `1000000` |
 | **Output** | `-f`, `-c` / `--file`, `--console` | `differences.csv` |
@@ -373,8 +373,11 @@ java -jar cluster-comparator.jar \
 
 ### Thread Configuration
 ```bash
-# Auto-detect: Use one thread per CPU core
+# Auto (default): min(CPU cores, 32)
 --threads 0  # Recommended starting point
+
+# Use every CPU core on the machine, with no cap
+--threads -1
 
 # Manual specification based on your environment
 --threads 4  # Specify exact number
@@ -384,7 +387,7 @@ java -jar cluster-comparator.jar \
 - **Cluster capacity**: More threads increase load on clusters
 - **Network latency**: Higher latency may benefit from more threads
 - **Comparison mode**: `RECORD_DIFFERENCES` is more resource-intensive
-- **Available CPU cores**: `--threads 0` uses one thread per core
+- **Available CPU cores**: `--threads 0` uses up to 32 cores; use `-1` for all cores
 - **Memory constraints**: Each thread uses additional memory
 - **Rate limiting**: Higher thread count may require `--rps` limits
 

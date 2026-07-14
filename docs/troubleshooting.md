@@ -119,7 +119,7 @@ java -jar cluster-comparator.jar \
 ### Performance Guidelines
 | Cluster Size | Thread Approach | Expected Duration | Memory Usage |
 |--------------|-----------------|------------------|--------------|
-| < 1M records | Start with `--threads 0` (auto) | Minutes | < 1GB |
+| < 1M records | Start with `--threads 0` (auto, max 32) | Minutes | < 1GB |
 | 1M-10M records | Auto or moderate count | 10-30 minutes | 1-2GB |
 | 10M-100M records | Consider cluster capacity | 30min-2hours | 2-4GB |
 | > 100M records | Use partition chunking* | Hours | 4-8GB |
@@ -127,14 +127,15 @@ java -jar cluster-comparator.jar \
 *Use `--startPartition`/`--endPartition` to process in batches
 
 **Thread Selection Strategy:**
-1. **Start with auto-detection**: `--threads 0` (one per CPU core)
-2. **Monitor cluster load**: Reduce if clusters become overwhelmed
-3. **Adjust based on results**: Increase if comparisons are slow and clusters can handle more load
+1. **Start with the default**: `--threads 0` (min(CPU cores, 32))
+2. **Use all cores if needed**: `--threads -1`
+3. **Monitor cluster load**: Reduce if clusters become overwhelmed
+4. **Adjust based on results**: Increase if comparisons are slow and clusters can handle more load
 
 ### For Large Datasets (millions of records)
 ```bash
-# Start with auto-detection, then adjust based on cluster performance
---threads 0   # Auto-detect cores
+# Start with the default, then adjust based on cluster performance
+--threads 0   # Auto: min(CPU cores, 32)
 --rps 5000    # Rate limit to avoid overloading
 
 # Process in partition chunks for very large datasets
@@ -193,14 +194,15 @@ network:
 
 # JVM tuning for large datasets
 java -Xmx8g -XX:+UseG1GC -jar cluster-comparator.jar \
-  --threads 0 \  # Start with auto-detect, reduce if needed
+  --threads 0 \  # Start with default auto threads, reduce if needed
   # ... other parameters
 ```
 
 ### CPU Optimization
 ```bash
 # Optimize for CPU-bound operations
---threads 0  # Auto-detect: one thread per CPU core
+--threads 0   # Auto: min(CPU cores, 32)
+--threads -1  # All CPU cores, no cap
 --sortMaps false  # Disable map sorting unless needed
 --compareMode MISSING_RECORDS  # Avoid expensive record comparison
 ```
@@ -435,10 +437,11 @@ java -Xmx4g -XX:+PrintGCDetails -jar cluster-comparator.jar \
 # ❌ Too many threads can overwhelm clusters
 --threads 50  # Likely too high for most environments
 
-# ✅ Start with auto-detection, then tune
---threads 0   # Auto-detect, monitor cluster load
+# ✅ Start with the default, then tune
+--threads 0   # Auto threads (capped at 32), monitor cluster load
+--threads -1  # All local CPU cores when you need maximum client parallelism
 # If clusters are overwhelmed, reduce: --threads 4
-# If clusters can handle more: --threads 16
+# If clusters can handle more but you want a fixed count: --threads 16
 
 # ❌ No rate limiting on busy clusters  
 # (no --rps parameter)

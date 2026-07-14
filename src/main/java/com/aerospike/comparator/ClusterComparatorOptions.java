@@ -29,6 +29,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
  *
  */
 public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceNameResolver {
+    public static final int DEFAULT_AUTO_THREAD_CAP = 32;
     private static final String DEFAULT_DATE_FORMAT = "yyyy/MM/dd-HH:mm:ssZ";
     public static enum Action {
         SCAN(false, true),
@@ -222,7 +223,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         options.addOption("cf", "configFile", true, "YAML file with config options in it");
         options.addOption("S", "startPartition", true, "Partition to start the comparison at. (Default: 0)");
         options.addOption("E", "endPartition", true, "Partition to end the comparison at. The comparison will not include this partition. (Default: 4096)");
-        options.addOption("t", "threads", true, "Number of threads to use. Use 0 to use 1 thread per core. (Default: 1)");
+        options.addOption("t", "threads", true, String.format(
+                "Number of threads to use. 0 (default) uses min(CPU cores, %d). "
+                + "-1 uses all CPU cores. Specify a positive number for an exact count.",
+                DEFAULT_AUTO_THREAD_CAP));
         options.addOption("f", "file", true, "Path to an output CSV file. If a comparison is run, this file will be overwritten if present.");
         options.addOption("s", "setNames", true, "Set name to scan for differences. Multiple sets can be specified in a comma-separated list. If not specified, all sets will be scanned.");
         options.addOption("n", "namespaces", true, "Namespaces to scan for differences. Multiple namespaces can be specified in a comma-separated list. Must include at least one namespace.");
@@ -465,8 +469,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             if (configError != null) {
                 System.out.println(configError);
             }
-            else if (this.threads < 0) {
-                System.out.println("threads must be >= 0, not " + this.threads);
+            else if (!isValidThreadsValue()) {
+                System.out.printf("threads must be -1 (use all CPU cores), 0 (auto, capped at %d), or a positive number, not %d%n",
+                        DEFAULT_AUTO_THREAD_CAP, this.threads);
             }
             else if (this.startPartition < 0 || this.startPartition >= 4096) {
                 System.out.println("startPartition must be >= 0 and < 4096, not " + this.startPartition);
@@ -616,8 +621,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         if (this.clusters == null || this.clusters.size() < 2) {
             errors.put("clusters", "At least 2 clusters with valid host addresses must be specified");
         }
-        if (this.threads < 0) {
-            errors.put("threads", "threads must be >= 0, not " + this.threads);
+        if (!isValidThreadsValue()) {
+            errors.put("threads", String.format(
+                    "threads must be -1 (use all CPU cores), 0 (auto, capped at %d), or a positive number, not %d",
+                    DEFAULT_AUTO_THREAD_CAP, this.threads));
         }
         if (this.startPartition < 0 || this.startPartition >= 4096) {
             errors.put("startPartition", "startPartition must be >= 0 and < 4096, not " + this.startPartition);
@@ -961,6 +968,33 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
 
     public int getThreads() {
         return threads;
+    }
+
+    public static boolean isValidThreadsValue(int threads) {
+        return threads == -1 || threads >= 0;
+    }
+
+    private boolean isValidThreadsValue() {
+        return isValidThreadsValue(threads);
+    }
+
+    public static int resolveThreadsToUse(int threads, int availableProcessors) {
+        if (threads < -1) {
+            throw new IllegalArgumentException(String.format(
+                    "threads must be -1 (use all CPU cores), 0 (auto, capped at %d), or a positive number, not %d",
+                    DEFAULT_AUTO_THREAD_CAP, threads));
+        }
+        if (threads == -1) {
+            return availableProcessors;
+        }
+        if (threads == 0) {
+            return Math.min(availableProcessors, DEFAULT_AUTO_THREAD_CAP);
+        }
+        return threads;
+    }
+
+    public int resolveThreadsToUse() {
+        return resolveThreadsToUse(threads, Runtime.getRuntime().availableProcessors());
     }
 
     public int getStartPartition() {

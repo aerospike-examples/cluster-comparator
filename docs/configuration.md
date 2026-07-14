@@ -454,9 +454,10 @@ paths:
 
 ### Performance Parameters
 ```bash
-# Concurrency (recommended: start with auto-detection)
---threads 0   # Auto: one thread per CPU core
---threads 8   # Manual: specify exact count
+# Concurrency (recommended: start with the default)
+--threads 0    # Auto: min(CPU cores, 32)
+--threads -1   # Use all CPU cores, with no cap
+--threads 8    # Manual: specify exact count
 
 # Rate limiting
 --rps 1000  # Limit to 1000 requests per second

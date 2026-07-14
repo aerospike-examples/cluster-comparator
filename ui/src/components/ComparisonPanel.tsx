@@ -293,11 +293,11 @@ export default function ComparisonPanel({ options, onChange, fieldErrors, availa
         </Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <TextField
-            fullWidth label={<>Threads <HelpTip text="Parallel worker threads. 0 = auto-detect (one per CPU core). Default: 0." /></>}
+            fullWidth label={<>Threads <HelpTip text="Parallel worker threads. 0 = auto (min(CPU cores, 32), default). -1 = all CPU cores. Otherwise specify an exact count." /></>}
             type="number"
             value={(options.threads as number) ?? 0}
             onChange={(e) => onChange('threads', Number(e.target.value))}
-            slotProps={{ htmlInput: { min: 0 } }}
+            slotProps={{ htmlInput: { min: -1 } }}
             {...err(fieldErrors, 'threads')}
           />
         </Grid>

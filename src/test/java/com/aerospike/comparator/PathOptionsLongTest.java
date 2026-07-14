@@ -8,144 +8,120 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 
-public class PathOptionsLongTest extends AbstractBaseTest{
+public class PathOptionsLongTest extends AbstractBaseTest {
+
+    @AfterEach
+    void tearDown() {
+        cleanupTestData();
+    }
+
     @Test
     public void ignoreOptionTest() throws Exception {
-        getClient(0).truncate(null, "test", SET_NAME, null);
-        getClient(1).truncate(null, "test", SET_NAME, null);
-        Key key = new Key("test", SET_NAME, 1);
-        getClient(0).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("ignore", 27));
-        getClient(1).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("ignore", 28));
-        
-        String[] args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES"};
-        ClusterComparatorOptions options = new ClusterComparatorOptions(args);
-        ClusterComparator comparator = new ClusterComparator(options);
-        DifferenceSummary differences = comparator.begin();
-        assertTrue(differences.areDifferent());
+        assumeTwoTestClustersAvailable();
+        truncateTwoTestClusters();
 
-        // Specify a YAML file with ignore to test
-        String fileName = writeYamlToFile("ignore.yaml", 
+        Key key = uniqueKey("long-ignore");
+        putRecord(TWO_CLUSTER_A, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("ignore", 27L));
+        putRecord(TWO_CLUSTER_B, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("ignore", 28L));
+
+        assertBinValuesDiffer(key, TWO_CLUSTER_A, TWO_CLUSTER_B, "ignore");
+
+        assertTrue(runComparator(twoClusterScanArgs("RECORD_DIFFERENCES", null)).areDifferent());
+
+        String fileName = writeYamlToFile("ignore.yaml",
                 "---",
                 "paths:",
-                String.format("- path: /test/%s/ignore", SET_NAME),
+                String.format("- path: /%s/%s/ignore", NAMESPACE, getTestSetName()),
                 "  action: ignore",
                 "");
         try {
-            args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                    "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES", "-pf", fileName};
-            options = new ClusterComparatorOptions(args);
-            comparator = new ClusterComparator(options);
-            differences = comparator.begin();
-            assertFalse(differences.areDifferent());
-        }
-        catch (Exception e) {
-            System.err.printf("Unexpected exception thrown: %s (%s)", e.getMessage(), e.getClass().getName());
-            e.printStackTrace();
-            throw e;
+            String[] args = twoClusterScanArgs("RECORD_DIFFERENCES", null);
+            String[] argsWithPath = new String[args.length + 2];
+            System.arraycopy(args, 0, argsWithPath, 0, args.length);
+            argsWithPath[args.length] = "-pf";
+            argsWithPath[args.length + 1] = fileName;
+
+            assertFalse(runComparator(argsWithPath).areDifferent());
         }
         finally {
-            getClient(0).delete(null, key);
-            getClient(1).delete(null, key);
             removeFile(fileName);
         }
     }
 
     @Test
     public void ignoreOptionOnNestedPathTest() throws Exception {
-        getClient(0).truncate(null, "test", SET_NAME, null);
-        getClient(1).truncate(null, "test", SET_NAME, null);
+        assumeTwoTestClustersAvailable();
+        truncateTwoTestClusters();
 
-        Key key = new Key("test", SET_NAME, 1);
+        Key key = uniqueKey("nested-ignore");
         Map<String, String> map = new HashMap<>();
         map.put("abc", "123");
         map.put("def", "456");
-        
+
         List<Object> list = new ArrayList<>();
         list.add("12345");
-        list.add(map);
-        getClient(0).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("list", list));
-        map.put("def", "567");
-        getClient(1).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("list", list));
-        
-        String[] args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES"};
-        ClusterComparatorOptions options = new ClusterComparatorOptions(args);
-        ClusterComparator comparator = new ClusterComparator(options);
-        DifferenceSummary differences = comparator.begin();
-        assertTrue(differences.areDifferent());
+        list.add(new HashMap<>(map));
+        putRecord(TWO_CLUSTER_A, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("list", list));
 
-        // Specify a YAML file with ignore to test
-        String fileName = writeYamlToFile("ignore.yaml", 
+        map.put("def", "567");
+        list.set(1, new HashMap<>(map));
+        putRecord(TWO_CLUSTER_B, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("list", list));
+
+        assertTrue(runComparator(twoClusterScanArgs("RECORD_DIFFERENCES", null)).areDifferent());
+
+        String fileName = writeYamlToFile("ignore.yaml",
                 "---",
                 "paths:",
-                String.format("- path: /test/%s/list/1/def", SET_NAME),
+                String.format("- path: /%s/%s/list/1/def", NAMESPACE, getTestSetName()),
                 "  action: ignore",
                 "");
         try {
-            args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                    "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES", "-pf", fileName};
-            options = new ClusterComparatorOptions(args);
-            comparator = new ClusterComparator(options);
-            differences = comparator.begin();
-            assertFalse(differences.areDifferent());
-        }
-        catch (Exception e) {
-            System.err.printf("Unexpected exception thrown: %s (%s)", e.getMessage(), e.getClass().getName());
-            e.printStackTrace();
-            throw e;
+            String[] args = twoClusterScanArgs("RECORD_DIFFERENCES", null);
+            String[] argsWithPath = new String[args.length + 2];
+            System.arraycopy(args, 0, argsWithPath, 0, args.length);
+            argsWithPath[args.length] = "-pf";
+            argsWithPath[args.length + 1] = fileName;
+
+            assertFalse(runComparator(argsWithPath).areDifferent());
         }
         finally {
-            getClient(0).delete(null, key);
-            getClient(1).delete(null, key);
             removeFile(fileName);
         }
     }
 
     @Test
     public void unorderedOptionTest() throws Exception {
-        getClient(0).truncate(null, "test", SET_NAME, null);
-        getClient(1).truncate(null, "test", SET_NAME, null);
+        assumeTwoTestClustersAvailable();
+        truncateTwoTestClusters();
 
-        Key key = new Key("test", SET_NAME, 1);
-        getClient(0).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("unordered", List.of(1, 2, 3, 4, 5)));
-        getClient(1).put(null, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("unordered", List.of(5, 1, 2, 3, 4)));
-        
-        String[] args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES"};
-        ClusterComparatorOptions options = new ClusterComparatorOptions(args);
-        ClusterComparator comparator = new ClusterComparator(options);
-        DifferenceSummary differences = comparator.begin();
-        assertTrue(differences.areDifferent());
+        Key key = uniqueKey("unordered");
+        putRecord(TWO_CLUSTER_A, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("unordered", List.of(1, 2, 3, 4, 5)));
+        putRecord(TWO_CLUSTER_B, key, new Bin("name", "Tim"), new Bin("age", 312), new Bin("unordered", List.of(5, 1, 2, 3, 4)));
 
-        // Specify a YAML file with ignore to test
-        String fileName = writeYamlToFile("unordered.yaml", 
+        assertTrue(runComparator(twoClusterScanArgs("RECORD_DIFFERENCES", null)).areDifferent());
+
+        String fileName = writeYamlToFile("unordered.yaml",
                 "---",
                 "paths:",
                 "- path: /test/*/unordered",
                 "  action: compareUnordered",
                 "");
         try {
-            args = new String[] {"-h1",getHostString(0), "-h2", getHostString(1), "-n", "test", 
-                    "-s", SET_NAME, "-a", "scan", "-c", "-t", "0", "-C", "RECORD_DIFFERENCES", "-pf", fileName};
-            options = new ClusterComparatorOptions(args);
-            comparator = new ClusterComparator(options);
-            differences = comparator.begin();
-            assertFalse(differences.areDifferent());
-        }
-        catch (Exception e) {
-            System.err.printf("Unexpected exception thrown: %s (%s)", e.getMessage(), e.getClass().getName());
-            e.printStackTrace();
-            throw e;
+            String[] args = twoClusterScanArgs("RECORD_DIFFERENCES", null);
+            String[] argsWithPath = new String[args.length + 2];
+            System.arraycopy(args, 0, argsWithPath, 0, args.length);
+            argsWithPath[args.length] = "-pf";
+            argsWithPath[args.length + 1] = fileName;
+
+            assertFalse(runComparator(argsWithPath).areDifferent());
         }
         finally {
-            getClient(0).delete(null, key);
-            getClient(1).delete(null, key);
             removeFile(fileName);
         }
     }
