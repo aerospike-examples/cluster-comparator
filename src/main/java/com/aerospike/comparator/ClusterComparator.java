@@ -287,6 +287,7 @@ public class ClusterComparator {
         clientPolicy.clusterName = config.getClusterName();
         clientPolicy.useServicesAlternate = config.isUseServicesAlternate();
         clientPolicy.minConnsPerNode = this.threadsToUse;
+        clientPolicy.maxConnsPerNode = this.threadsToUse + 1;
 
         clientPolicy.readPolicyDefault = readPolicyToUse;
         clientPolicy.queryPolicyDefault = queryPolicyToUse;
@@ -1593,7 +1594,7 @@ public class ClusterComparator {
             return null;
         }
         this.printExecutionParameters();
-        this.threadsToUse = options.getThreads() <= 0 ? Runtime.getRuntime().availableProcessors() : options.getThreads();
+        this.threadsToUse = options.resolveThreadsToUse();
         AerospikeClientAccess[] clients = new AerospikeClientAccess[numberOfClusters];
         forEachCluster((i, c) -> clients[i] = this.connectClient(i, c));
         Scanner input = null;
