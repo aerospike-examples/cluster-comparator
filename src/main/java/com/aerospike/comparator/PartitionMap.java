@@ -18,15 +18,21 @@ public class PartitionMap {
         for (String nodeName : nodeToInfo.keySet()) {
             String result = nodeToInfo.get(nodeName);
             String[] lines = result.split(";" );
+            if (lines.length == 0) {
+                continue;
+            }
+            // The first line names the columns. Use it to resolve fields by name
+            // rather than by position, as the server has added fields over time.
+            Map<String, Integer> fieldIndex = PartitionData.parseHeader(lines[0]);
             boolean first = true;
             for (String line: lines) {
                 if (first) {
-                    // This is a heading line, skip it
+                    // This is the heading line, already consumed above
                     first = false;
                     continue;
                 }
-                
-                PartitionData data = new PartitionData(line);
+
+                PartitionData data = new PartitionData(line, fieldIndex);
                 String namespace = data.getNamespace();
                 if (namespaceToPartitions.get(namespace) == null) {
                     List<PartitionData> partData = new ArrayList<>(NUMBER_OF_PARTITIONS);
