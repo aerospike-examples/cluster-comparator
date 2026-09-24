@@ -1,12 +1,12 @@
 # Comparison Modes
 
 ## 📚 Documentation Navigation
-| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [🏗️ Architecture](architecture.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
-|---|---|---|---|---|---|
+| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [📖 How it works](how-it-works.md) | [🏗️ Architecture](architecture.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
+|---|---|---|---|---|---|---|
 
 ---
 
-This document explains the different comparison modes and when to use each one.
+This document explains the different comparison modes and when to use each one. For a narrative of **how** scans, date-filter verification, set mapping, and batch lookups behave, see [How the Comparator Works](how-it-works.md).
 
 ## 🔍 Comparison Modes Overview
 

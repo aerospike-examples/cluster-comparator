@@ -1,8 +1,8 @@
 # Use Cases & Scenarios
 
 ## 📚 Documentation Navigation
-| [🏠 Home](../README.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
-|---|---|---|---|---|---|
+| [🏠 Home](../README.md) | [📖 How it works](how-it-works.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
+|---|---|---|---|---|---|---|
 
 ---
 
@@ -229,7 +229,50 @@ java -jar cluster-comparator.jar \
 
 **Important:** Cross-set comparison requires that the user key is stored on the source records (written with `sendKey = true`). Without the user key, a new digest cannot be computed for the mapped set name, and those records will be skipped with a warning.
 
-### 10. **Firewall/Network Restricted Environments**
+This path is **source-driven**: the tool scans `users` and looks those keys up in `accounts`. Records that exist only in `accounts` are not reported. For a fuller description of the scan vs lookup behaviour, see [How the Comparator Works](how-it-works.md#set-mapping-source-driven-scans).
+
+### 10. **Same-Cluster Set Comparison**
+*Scenario: Two sets on the same cluster should hold the same records (for example a copy or rename in place), and you want to verify `users` against `accounts` without a second cluster.*
+
+The comparator always has two or more **sides**. Point both sides at the same cluster and use set mapping so side 2 reads a different set.
+
+Identify the mapped side by **`clusterIndex`**, not by an invented `clusterName`. In a config file `clusterName` is passed to the Aerospike client as the *expected* cluster name and is validated against the server's `cluster-name` setting, so a made-up label fails at connect time with `expected cluster name 'dest' received '<real name>'`. Both sides are the same real cluster here, so an index is the unambiguous way to name the destination.
+
+Create `same-cluster-sets.yaml`:
+```yaml
+---
+clusters:
+- hostName: localhost:3000
+- hostName: localhost:3000
+
+setMapping:
+- set: users
+  mappings:
+  - clusterIndex: 2
+    name: accounts
+```
+
+```bash
+java -jar cluster-comparator.jar \
+  --configFile same-cluster-sets.yaml \
+  --namespaces test \
+  --setNames users \
+  --action scan \
+  --compareMode MISSING_RECORDS \
+  --sourceCluster 1 \
+  --file same-cluster-set-diff.csv \
+  --console
+```
+
+**Why this works:** `--sourceCluster 1` scans set `users`. Each key is then batch-looked up in set `accounts` on the second side, which is the same cluster. `--setNames users,accounts` without mapping would *not* do this: it would compare `users` to `users`, then `accounts` to `accounts`.
+
+**Important:** Same requirements as cross-cluster set mapping: stored user keys (`sendKey = true`), no `QUICK_NAMESPACE`, and records that exist only in `accounts` are not reported.
+
+Records written without a stored user key are **skipped**, and the per-record warning only appears with `--verbose`. Without it a run over such data simply reports nothing, which looks like "the sets match". Run with `--verbose` the first time you use set mapping on unfamiliar data.
+
+You can use `RECORDS_DIFFERENT` or `RECORD_DIFFERENCES` the same way if you also need content comparison. See [How the Comparator Works](how-it-works.md#set-mapping-source-driven-scans).
+
+### 11. **Firewall/Network Restricted Environments**
 *Scenario: No single machine can reach both clusters.*
 
 **On machine with access to cluster1:**
@@ -339,4 +382,4 @@ java -jar cluster-comparator.jar \
 
 ---
 
-**Next:** Learn about [Architecture & Deployment](architecture.md) options for different network configurations.
+**Next:** Read [How the Comparator Works](how-it-works.md) for scan behaviour, or [Architecture & Deployment](architecture.md) for network layouts.

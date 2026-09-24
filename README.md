@@ -80,6 +80,7 @@ Time-filtered comparisons add `--beginDate` and optionally `--endDate`; see [Val
 
 | Document | Description |
 |----------|-------------|
+| **[How the Comparator Works](docs/how-it-works.md)** | How scans, modes, date filters, set mapping, and batch lookups behave |
 | **[Use Cases & Scenarios](docs/use-cases.md)** | Real-world examples and step-by-step workflows |
 | **[Architecture & Deployment](docs/architecture.md)** | Network architectures and deployment patterns |
 | **[Comparison Modes](docs/comparison-modes.md)** | Detailed explanation of all comparison modes |
@@ -130,7 +131,7 @@ Publishing the release creates and pushes the tag, which triggers [`.github/work
 
 ## 🔄 Basic Workflow
 
-1. **Choose your comparison mode** based on your needs:
+1. **Choose your comparison mode** based on your needs (see [How the Comparator Works](docs/how-it-works.md) for behaviour, [Comparison Modes](docs/comparison-modes.md) for choosing):
    - `QUICK_NAMESPACE` for fast health checks
    - `MISSING_RECORDS` for finding missing data (default)
    - `RECORDS_DIFFERENT` for content verification

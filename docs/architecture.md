@@ -1,8 +1,8 @@
 # Architecture & Deployment
 
 ## 📚 Documentation Navigation
-| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
-|---|---|---|---|---|---|
+| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [📖 How it works](how-it-works.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
+|---|---|---|---|---|---|---|
 
 ---
 
@@ -226,4 +226,4 @@ The comparator uses Aerospike's `queryPartitions` API for efficient partition-by
 
 ---
 
-**Next:** Learn about [Comparison Modes](comparison-modes.md) to choose the right comparison strategy.
+**Next:** [How the Comparator Works](how-it-works.md) for scan behaviour, then [Comparison Modes](comparison-modes.md) to choose a mode.

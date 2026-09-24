@@ -126,6 +126,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     private int lookupBatchSize = 100;
 	private boolean skipDateRangeVerify = false;
     private int sourceCluster = -1;
+    private String sourceClusterArg;
     
     static class ParseException extends RuntimeException {
         private static final long serialVersionUID = 5652947902453765251L;
@@ -219,7 +220,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         return null;
     }
     
-    private Options formOptions() {
+    static Options formOptions() {
         Options options = new Options();
         options.addOption("cf", "configFile", true, "YAML file with config options in it");
         options.addOption("S", "startPartition", true, "Partition to start the comparison at. (Default: 0)");
@@ -350,6 +351,15 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 "Number of records to accumulate before performing a batch read on clusters where the "
                 + "record was not found. Used by date range verification and set mapping modes. All "
                 + "records in a batch target the same server node (same partition). (Default: 100)");
+        options.addOption("sdv", "skipDateRangeVerify", false,
+                "When set, records missing from some clusters during a date-filtered scan are reported "
+                + "immediately without verifying whether they exist outside the date range on the missing "
+                + "clusters. By default (without this flag), missing records are re-read without the date "
+                + "filter to distinguish truly missing records from those outside the time window.");
+        options.addOption("sc", "sourceCluster", true,
+                "Which cluster to partition-scan when set mapping is configured. Other clusters are "
+                + "looked up by batch. Value is a 1-based cluster id or a cluster name from the config file. "
+                + "Required when setMapping is present.");
         options.addOption("wip", "webInterfacePort", true,
                 "Start a web interface on this port instead of running from the command line.");
         options.addOption("wpw", "webPassword", true,
@@ -446,6 +456,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 hasErrors = true;
             }
         }
+
+        // Resolve --sourceCluster after cluster names exist (config file or --clusterNameN).
+        this.sourceCluster = parseSourceCluster(this.sourceClusterArg);
 
         if (!hasErrors && this.configOptions != null) {
             configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
@@ -806,7 +819,8 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         this.webPassword = cl.getOptionValue("webPassword");
         this.lookupBatchSize = Integer.parseInt(cl.getOptionValue("lookupBatchSize", "100"));
         this.skipDateRangeVerify = cl.hasOption("skipDateRangeVerify");
-        this.sourceCluster = parseSourceCluster(cl.getOptionValue("sourceCluster"));
+        this.sourceClusterArg = cl.getOptionValue("sourceCluster");
+        this.sourceCluster = parseSourceCluster(this.sourceClusterArg);
         
         if (this.isWebInterface()) {
             if (this.webInterfacePort < 1 || this.webInterfacePort > 65535) {

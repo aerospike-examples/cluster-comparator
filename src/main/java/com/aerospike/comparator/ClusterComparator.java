@@ -70,6 +70,8 @@ public class ClusterComparator {
     private final AtomicLong totalMissingRecords = new AtomicLong();
     final AtomicLong totalRecordsCompared = new AtomicLong();
     private final AtomicLong recordsRemaining = new AtomicLong();
+    private final AtomicLong recordsSkippedMissingUserKey = new AtomicLong();
+    private final AtomicLong cumulativeRecordsSkippedMissingUserKey = new AtomicLong();
     final AtomicBoolean[] partitionsComplete;
     
     private ExecutorService executor = null;
@@ -106,6 +108,14 @@ public class ClusterComparator {
 
     int getNumberOfClusters() {
         return numberOfClusters;
+    }
+
+    void incrementRecordsSkippedMissingUserKey() {
+        recordsSkippedMissingUserKey.incrementAndGet();
+    }
+
+    long getRecordsSkippedMissingUserKey() {
+        return recordsSkippedMissingUserKey.get();
     }
 
     ClusterComparatorOptions getOptions() {
@@ -293,6 +303,8 @@ public class ClusterComparator {
             cumulativeRecordsProcessedOnCluster.addAndGet(i, recordsProcessedOnCluster.get(i));
             recordsProcessedOnCluster.set(i, 0);
         }
+        cumulativeRecordsSkippedMissingUserKey.addAndGet(recordsSkippedMissingUserKey.get());
+        recordsSkippedMissingUserKey.set(0);
         resetPartitionsComplete();
         this.failedPartitionsList.clear();
         this.currentNamespace = namespace;
@@ -331,6 +343,29 @@ public class ClusterComparator {
 
     private String currentUnitTimeLabel() {
         return setCount > 1 ? "this set" : "this namespace";
+    }
+
+    private boolean shouldReportSkippedMissingUserKey() {
+        return options.hasSetMapping();
+    }
+
+    private void printSkippedMissingUserKeyProgress(boolean includeCumulative) {
+        if (!shouldReportSkippedMissingUserKey()) {
+            return;
+        }
+        long skipped = recordsSkippedMissingUserKey.get();
+        System.out.printf(", skipped (no user key): %,d", skipped);
+        if (includeCumulative) {
+            System.out.printf(", cumulative skipped: %,d",
+                    cumulativeRecordsSkippedMissingUserKey.get() + skipped);
+        }
+    }
+
+    private void printSkippedMissingUserKeySummary() {
+        if (!shouldReportSkippedMissingUserKey()) {
+            return;
+        }
+        System.out.printf("Records skipped (no stored user key): %,d\n", recordsSkippedMissingUserKey.get());
     }
 
     private void printProgressPrefix(long elapsedThisScanMs, long elapsedTotalMs) {
@@ -1341,6 +1376,8 @@ public class ClusterComparator {
             recordsProcessedOnCluster.set(i, 0);
             cumulativeRecordsProcessedOnCluster.set(i, 0);
         }
+        recordsSkippedMissingUserKey.set(0);
+        cumulativeRecordsSkippedMissingUserKey.set(0);
 
         if (options.isMetadataCompare()) {
             MetadataComparator metadataComparator = new MetadataComparator(options);
@@ -1389,6 +1426,7 @@ public class ClusterComparator {
                 String title = options.getCompareMode() == CompareMode.FIND_OVERLAP ? "Overlapping" : "Missing";
                 forEachCluster((i, c) -> System.out.printf("%s records on cluster %s : %,d\n", title, options.clusterIdToName(i), this.recordsMissingOnCluster.get(i)));
             }
+            printSkippedMissingUserKeySummary();
             if (this.forceTerminate) {
                 if (this.totalMissingRecords.get() >= this.options.getMissingRecordsLimit()) {
                     System.out.printf("Comparison terminated after finding %d missing records on a limit of %d\n", 
@@ -1473,14 +1511,18 @@ public class ClusterComparator {
                     System.out.print("} cumulative: {");
                     forEachCluster((i, c) -> System.out.printf("%s%s: %,d", i > 0 ? ", ": "" , options.clusterIdToName(i),
                             this.cumulativeRecordsProcessedOnCluster.get(i) + currentRecordsForCluster[i]));
-                    System.out.printf("} throughput: {last second: %,d rps, %s: %,d rps, overall: %,d rps}\n",
+                    System.out.print("}");
+                    printSkippedMissingUserKeyProgress(true);
+                    System.out.printf(" throughput: {last second: %,d rps, %s: %,d rps, overall: %,d rps}\n",
                             recordsThisSecond / numberOfClusters,
                             currentUnitTimeLabel(),
                             totalCurrentRecords * 1000 / numberOfClusters / elapsedMilliseconds,
                             totalCumulativeRecords * 1000 / numberOfClusters / elapsedTotalMilliseconds);
                 }
                 else {
-                    System.out.printf("} throughput: {last second: %,d rps, overall: %,d rps}\n", 
+                    System.out.print("}");
+                    printSkippedMissingUserKeyProgress(false);
+                    System.out.printf(" throughput: {last second: %,d rps, overall: %,d rps}\n", 
                             recordsThisSecond / numberOfClusters,
                             totalCurrentRecords * 1000 / numberOfClusters / elapsedMilliseconds);
                 }
