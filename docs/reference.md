@@ -1,8 +1,8 @@
 # Quick Reference
 
 ## 📚 Documentation Navigation
-| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) |
-|---|---|---|---|---|---|
+| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [📖 How it works](how-it-works.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) |
+|---|---|---|---|---|---|---|
 
 ---
 
@@ -119,7 +119,7 @@ java -jar cluster-comparator.jar \
 | `-sm`, `--sortMaps` | Sort map contents for consistent comparison | `true` |
 | `-m`, `--metadataCompare` | Perform metadata-only comparison | _(flag, no value)_ |
 | `--skipChallenge` | Skip deletion confirmations | _(flag, no value)_ |
-| `-sc`, `--sourceCluster` | Source cluster for set mapping (1-based ID or name) | `1` or `primary` |
+| `-sc`, `--sourceCluster` | Source cluster for set mapping (1-based ID or name). Required with `setMapping`; also used to compare two sets on the same cluster. See [How it works](how-it-works.md#set-mapping-source-driven-scans). | `1` or `primary` |
 
 ### File & Output Options
 | Option (Short/Long) | Description | Example |
@@ -233,7 +233,7 @@ java -jar cluster-comparator.jar \
   --console
 ```
 
-**Batch tuning:** Use `--lookupBatchSize` (default: 100) to control how many missing records are accumulated before performing a batch read on the clusters where they were not found. All records in a batch target the same server node (same partition). When record content is not needed (e.g., `MISSING_RECORDS` mode), `batch exists` is used instead of `batch get` to minimize network traffic.
+**Batch tuning:** Use `--lookupBatchSize` (default: 100) to control how many missing records are accumulated before performing a batch read on the clusters where they were not found. All records in a batch target the same server node (same partition). When record content is not needed (e.g., `MISSING_RECORDS` mode), `batch exists` is used instead of `batch get` to minimize network traffic. The same batching is used for set-mapping lookups. See [How the Comparator Works](how-it-works.md).
 
 Periodic console progress lines label per-cluster totals as **records scanned** (see [Troubleshooting — Output interpretation](troubleshooting.md#output-interpretation)).
 

@@ -1,8 +1,8 @@
 # Configuration
 
 ## 📚 Documentation Navigation
-| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
-|---|---|---|---|---|---|
+| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [📖 How it works](how-it-works.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
+|---|---|---|---|---|---|---|
 
 ---
 
@@ -236,6 +236,10 @@ setMapping:
 ```
 
 This means: when comparing set `users`, records on cluster `replica` should be looked up in set `accounts` instead.
+
+The same mechanism works when both sides are **the same cluster** (two set names, one cluster): list the host twice and map the destination side to the other set by `clusterIndex`. Do not invent `clusterName` labels for this — `clusterName` is validated against the server's actual `cluster-name`. See [Same-cluster set comparison](use-cases.md#10-same-cluster-set-comparison).
+
+Set mapping is **source-driven** (scan one set, batch-lookup the other). It is not a parallel walk of both sets, so extras that exist only on the mapped set are not reported. `QUICK_NAMESPACE` cannot be used. See [How the Comparator Works](how-it-works.md#set-mapping-source-driven-scans).
 
 **Requirements:**
 - Set mapping requires `--sourceCluster` to identify which cluster to scan (the source side).

@@ -1,8 +1,8 @@
 # Web Interface
 
 ## 📚 Documentation Navigation
-| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
-|---|---|---|---|---|---|---|
+| [🏠 Home](../README.md) | [📋 Use Cases](use-cases.md) | [📖 How it works](how-it-works.md) | [🏗️ Architecture](architecture.md) | [🔍 Comparison Modes](comparison-modes.md) | [⚙️ Configuration](configuration.md) | [🚨 Troubleshooting](troubleshooting.md) | [📋 Reference](reference.md) |
+|---|---|---|---|---|---|---|---|
 
 ---
 

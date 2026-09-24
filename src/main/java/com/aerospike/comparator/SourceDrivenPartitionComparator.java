@@ -114,6 +114,25 @@ class SourceDrivenPartitionComparator {
         Record[][] nonSourceRecords = new Record[parent.getNumberOfClusters()][];
         boolean[][] nonSourceExists = new boolean[parent.getNumberOfClusters()][];
 
+        boolean anySetMapped = false;
+        for (int clusterIdx : nonSourceIndices) {
+            if (!options.getSetName(setName, clusterIdx).equals(setName)) {
+                anySetMapped = true;
+                break;
+            }
+        }
+        if (anySetMapped) {
+            for (SourceRecord sr : batch) {
+                if (sr.key.userKey == null) {
+                    parent.incrementRecordsSkippedMissingUserKey();
+                    if (options.isVerbose()) {
+                        System.out.printf("Warning: Skipping record with digest %s - set mapping requires stored user key\n",
+                                Arrays.toString(sr.key.digest));
+                    }
+                }
+            }
+        }
+
         for (int clusterIdx : nonSourceIndices) {
             String resolvedNamespace = options.getNamespaceName(namespace, clusterIdx);
             String resolvedSet = options.getSetName(setName, clusterIdx);
@@ -127,10 +146,6 @@ class SourceDrivenPartitionComparator {
                 if (setMapped) {
                     if (sr.key.userKey == null) {
                         validKeys[b] = false;
-                        if (options.isVerbose()) {
-                            System.out.printf("Warning: Skipping record with digest %s - set mapping requires stored user key\n",
-                                    Arrays.toString(sr.key.digest));
-                        }
                         continue;
                     }
                     lookupKeys[b] = new Key(resolvedNamespace, resolvedSet, sr.key.userKey);
