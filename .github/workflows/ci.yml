@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The default (jdk11-baseline) build, actually run on both JDKs it
+          # targets - proves it works on 11 itself, and that running it
+          # unmodified on 21 (bytecode is forward-compatible) also works.
+          - name: jdk11 variant on JDK 11
+            java: '11'
+            profile: ''
+            artifact-suffix: jdk11-on-java11
+          - name: jdk11 variant on JDK 21
+            java: '21'
+            profile: ''
+            artifact-suffix: jdk11-on-java21
+          # The jdk21-optimized variant. Requires JDK 21+ to build (javac
+          # can't target a release higher than its own JDK).
+          - name: jdk21 variant on JDK 21
+            java: '21'
+            profile: '-Pjdk21'
+            artifact-suffix: jdk21-on-java21
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+
+      - name: Build and test (full build, including web UI)
+        run: ./mvnw -B clean verify ${{ matrix.profile }}
+
+      - name: Upload full jar (build artifact, not a release)
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-comparator-jar-${{ matrix.artifact-suffix }}
+          path: target/ClusterComparator-*-full.jar
+          if-no-files-found: error

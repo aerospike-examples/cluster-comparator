@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.aerospike.timf</groupId>
   <artifactId>ClusterComparator</artifactId>
-  <version>1.2.9</version>
+  <version>1.3.0</version>
   <name>Cluster Comparator</name>
   <description>Find differences between different Aerospike clusters.</description>
   
@@ -15,12 +15,28 @@
 		<javalin.version>6.7.0</javalin.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<!--
+		  Default build: an 11-baseline jar. aerospike-client-jdk8 is still the right
+		  dependency here even though the baseline is 11, not 8 - Aerospike only
+		  publishes two client tiers (jdk8 and jdk21), and the jdk8 one is Java 8
+		  bytecode, so it runs fine on 11+. (An actual Java 8 runtime isn't supported
+		  by this build: Javalin - the web UI's embedded server - is itself compiled
+		  for Java 11+, starting at Javalin 5.0.)
+		  The "jdk21" profile below overrides both properties to build a second,
+		  separate jar for people specifically on JDK 21+ who want Aerospike's
+		  newer-JVM-optimized client (aerospike-client-jdk21, which requires a 21+
+		  JRE and will NOT load on anything older).
+		-->
+		<aerospike-client.artifactId>aerospike-client-jdk8</aerospike-client.artifactId>
+		<maven.compiler.release>11</maven.compiler.release>
+		<jar.variant>jdk11</jar.variant>
 	</properties>
 
   <dependencies>
       <dependency>
         <groupId>com.aerospike</groupId>
-        <artifactId>aerospike-client-jdk8</artifactId>
+        <artifactId>${aerospike-client.artifactId}</artifactId>
         <version>${aerospike-client.verion}</version>
       </dependency>
 		<!-- Commons CLI needed for command line parsing on utilities -->
@@ -78,8 +94,11 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.15.0</version>
 				<configuration>
-					<source>11</source>
-					<target>11</target>
+					<!--
+					  <release> (not <source>/<target>) so the compiler validates against that
+					  JDK's actual API surface even when Maven itself runs on a newer JDK.
+					-->
+					<release>${maven.compiler.release}</release>
 				</configuration>
 			</plugin>
 			<plugin>
@@ -96,7 +115,7 @@
 							<addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
 						</manifest>
 					</archive>
-					<finalName>${project.artifactId}-${project.version}-full</finalName>
+					<finalName>${project.artifactId}-${project.version}-${jar.variant}-full</finalName>
 					<appendAssemblyId>false</appendAssemblyId>
 				</configuration>
 				<executions>
@@ -171,6 +190,21 @@
 					</plugin>
 				</plugins>
 			</build>
+		</profile>
+
+		<!--
+		  Builds the alternate jar for people specifically on JDK 21+ who want
+		  Aerospike's newer-JVM-optimized client. Requires JDK 21+ to run Maven itself
+		  (javac can't target a release higher than its own JDK). Activate with the
+		  jdk21 Maven profile.
+		-->
+		<profile>
+			<id>jdk21</id>
+			<properties>
+				<aerospike-client.artifactId>aerospike-client-jdk21</aerospike-client.artifactId>
+				<maven.compiler.release>21</maven.compiler.release>
+				<jar.variant>jdk21</jar.variant>
+			</properties>
 		</profile>
 	</profiles>
 

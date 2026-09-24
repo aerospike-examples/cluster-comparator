@@ -1,0 +1,81 @@
+name: Release
+
+# Publishes two ready-to-run jars (web UI included, no build required) as
+# GitHub Release assets whenever a version tag is pushed. This exists so
+# people who can't build the project themselves (e.g. behind a corporate
+# firewall that blocks the Node.js/npm download used to rebuild the UI)
+# can just download a working jar.
+#
+# Two variants are published, since Aerospike itself only publishes two
+# client tiers:
+#   - ClusterComparator-X.Y.Z-jdk11-full.jar: the default build. Runs on
+#     JDK 11 and newer (aerospike-client-jdk8, forward-compatible bytecode).
+#   - ClusterComparator-X.Y.Z-jdk21-full.jar: for people specifically on
+#     JDK 21+ who want Aerospike's newer-JVM-optimized client
+#     (aerospike-client-jdk21) - requires a 21+ JRE, will not load on older.
+#
+# Cutting a release:
+#   1. Bump <version> in pom.xml to the release version, commit/PR, merge to main.
+#   2. Tag that exact commit: git tag vX.Y.Z && git push origin vX.Y.Z.
+# This workflow does NOT change pom.xml itself - it verifies the tag matches
+# pom.xml's version and fails fast with a clear error if they don't, rather
+# than silently publishing a jar whose filename doesn't match what you'd get
+# rebuilding that same tag yourself.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)publish a release for'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify pom.xml version matches the tag
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          EXPECTED="${TAG#v}"
+          ACTUAL="$(./mvnw -q -B help:evaluate -Dexpression=project.version -DforceStdout)"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::pom.xml version is '$ACTUAL' but tag $TAG expects '$EXPECTED'."
+            echo "::error::Bump <version> in pom.xml to $EXPECTED and merge that to main BEFORE tagging - see the comment at the top of release.yml."
+            exit 1
+          fi
+
+      - name: Build jdk11 variant (default, includes web UI)
+        run: |
+          ./mvnw -B clean package -DskipTests
+          mkdir -p dist
+          cp target/ClusterComparator-*-full.jar dist/
+
+      - name: Build jdk21 variant (includes web UI)
+        # `clean` wipes target/ - the jdk11 jar was already copied to dist/ above.
+        run: |
+          ./mvnw -B clean package -DskipTests -Pjdk21
+          cp target/ClusterComparator-*-full.jar dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: dist/*.jar
+          generate_release_notes: true

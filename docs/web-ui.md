@@ -47,25 +47,27 @@ Users must enter this password before accessing the interface. The password is v
 
 ## Building
 
-### Default Build (includes UI)
-
-The UI is built automatically as part of the standard Maven build. Node.js and npm are downloaded and managed by the `frontend-maven-plugin` — you do not need to install them separately:
+### Recommended Build (offline-friendly, includes a working UI)
 
 ```bash
-mvn clean package
+./mvnw clean package -DskipUi
 ```
 
-The built UI assets are placed in `src/main/resources/webapp/` and bundled into the JAR.
+This is the build most people — especially anyone behind a corporate firewall or proxy — should use. It compiles only the Java code and packages the **pre-built UI assets already committed to the repository** (`src/main/resources/webapp/`) into the jar. The web interface works exactly as shipped; it just won't reflect local UI source changes. This build needs nothing beyond your normal Maven dependency access (Maven Central or your internal mirror) — no Node.js, no npm, no additional outbound access.
 
-### Skipping the UI Build
+The `./mvnw` wrapper downloads the right Maven version itself, so you don't need Maven installed locally. If you already have Maven, `mvn clean package -DskipUi` does the same thing.
 
-If you don't need the web interface and want faster builds, skip the UI build with:
+> **Not sure which build to use?** Use this one, unless you are actively editing the React UI source under `ui/`.
+
+### Full Build (rebuilds the UI from source)
 
 ```bash
-mvn clean package -DskipUi
+./mvnw clean package
 ```
 
-This uses the pre-built UI assets already committed to the repository. The web interface will still work — it just won't reflect any local UI code changes.
+Without `-DskipUi`, Maven activates the `build-ui` profile, which uses the `frontend-maven-plugin` to **download a Node.js binary directly from nodejs.org and npm packages from the npm registry**, then runs `npm install && npm run build` to regenerate `src/main/resources/webapp/` from `ui/`. This is what you want when you've changed UI source and need the jar to reflect it.
+
+⚠️ **This is the build that fails behind restrictive corporate firewalls.** Direct binary downloads from `nodejs.org`/`registry.npmjs.org` are commonly blocked even when Maven Central (or an internal Artifactory/Nexus mirror) is reachable. If this fails with a download/connection error during the `frontend-maven-plugin` steps, switch to the recommended build above — it does not need Node or npm at all.
 
 ### Developing the UI
 

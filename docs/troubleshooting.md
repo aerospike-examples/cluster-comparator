@@ -12,6 +12,17 @@ This document covers common issues, performance optimization, security best prac
 
 ### Common Issues and Solutions
 
+#### `mvn clean package` fails downloading Node.js / npm packages
+```bash
+# ❌ Corporate firewall blocks direct downloads from nodejs.org / registry.npmjs.org,
+# which the default build uses to rebuild the web UI
+
+# ✅ Build without rebuilding the UI — uses the pre-built UI assets already
+# committed to the repo, needs nothing beyond your normal Maven dependency access
+./mvnw clean package -DskipUi
+```
+See [Building From Source](../README.md#-building-from-source) and [Building the Web Interface](web-ui.md#building) for details.
+
 #### "No cluster hosts specified"
 ```bash
 # ❌ Missing connection details
