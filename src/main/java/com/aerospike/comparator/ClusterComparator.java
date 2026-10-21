@@ -1797,12 +1797,14 @@ public class ClusterComparator {
         if (!options.isSilent()) {
             System.out.printf("=== Aerospike Cluster Comparator v%s ===\n", this.getClass().getPackage().getImplementationVersion());
         }
+        // The remote server still needs the threadsToUse in order to set the connection pool sizes, so this must come before starting
+        // the remote server.
+        this.threadsToUse = options.resolveThreadsToUse();
         if (options.isRemoteServer()) {
             startRemoteServer();
             return null;
         }
         this.printExecutionParameters();
-        this.threadsToUse = options.resolveThreadsToUse();
         AerospikeClientAccess[] clients = new AerospikeClientAccess[numberOfClusters];
         forEachCluster((i, c) -> clients[i] = this.connectClient(i, c));
         Scanner input = null;
