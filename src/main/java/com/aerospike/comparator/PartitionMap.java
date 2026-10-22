@@ -119,12 +119,20 @@ public class PartitionMap {
     }
     
     public List<Integer> compare(PartitionMap partMap, String namespace) {
-        if (!this.isComplete(namespace) || !partMap.isComplete(namespace)) {
+        return compare(partMap, namespace, namespace);
+    }
+
+    /**
+     * Compare two partition maps when each side uses its own namespace name.
+     * Namespace mapping stores counts under the name that exists on that cluster.
+     */
+    public List<Integer> compare(PartitionMap partMap, String thisNamespace, String otherNamespace) {
+        if (!this.isComplete(thisNamespace) || !partMap.isComplete(otherNamespace)) {
             throw new QuickCompareException("Partition maps can only be compared for maps which are complete");
         }
         List<Integer> results = new ArrayList<>();
         for (int i = 0; i < NUMBER_OF_PARTITIONS; i++) {
-            if (getNetObjectCount(namespace, i) != partMap.getNetObjectCount(namespace, i)) {
+            if (getNetObjectCount(thisNamespace, i) != partMap.getNetObjectCount(otherNamespace, i)) {
                 results.add(i);
             }
         }

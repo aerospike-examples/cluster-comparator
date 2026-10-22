@@ -82,9 +82,9 @@ Those follow-up reads are **batch** operations against the node that owns the pa
 
 Normal scans query the **same logical set name** on every side (after namespace mapping). **Set mapping** is different: the data lives under **another set name** on some sides (rename, copy, or two sets on one cluster).
 
-With `setMapping` in the config and `--sourceCluster`:
+With `setMapping` in the config, `--sourceCluster`, and `--setNames`:
 
-1. Only the **source** side is partition-scanned (the set you passed in `--setNames`).
+1. Only the **source** side is partition-scanned (the set you passed in `--setNames`). `--setNames` is required; without it the run is rejected.
 2. For each source record, the comparator builds a key for the **mapped** set on the other side(s) and looks those keys up in **batches** (same `--lookupBatchSize` idea).
 3. Digests **include the set name**, so the lookup must rebuild the key. That requires the **user key to be stored** on the source record (`sendKey = true` at write time). Records without a stored key are skipped.
 

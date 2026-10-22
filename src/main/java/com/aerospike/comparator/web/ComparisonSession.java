@@ -3,6 +3,7 @@ package com.aerospike.comparator.web;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import com.aerospike.comparator.ClusterComparator;
 import com.aerospike.comparator.ClusterComparatorOptions;
@@ -23,7 +24,13 @@ public class ComparisonSession {
             return "A comparison is already running.";
         }
         try {
-            ClusterComparatorOptions opts = new ClusterComparatorOptions(args);
+            // Do not use the validating constructor. A validation failure calls
+            // System.exit and would stop the web process.
+            ClusterComparatorOptions opts = new ClusterComparatorOptions(args, true);
+            Map<String, String> fieldErrors = opts.validateAndCollectErrors();
+            if (!fieldErrors.isEmpty()) {
+                return "Failed to initialize: " + fieldErrors.values().iterator().next();
+            }
             comparator = new ClusterComparator(opts);
         } catch (Exception e) {
             return "Failed to initialize: " + e.getMessage();

@@ -62,7 +62,7 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
         if (s == null) {
             return "";
         }
-        if (!s.contains("\"")) {
+        if (s.indexOf(',') < 0 && s.indexOf('"') < 0 && s.indexOf('\n') < 0 && s.indexOf('\r') < 0) {
             return s;
         }
         return "\"" + s.replace("\"", "\"\"") + "\"";
@@ -90,10 +90,10 @@ public class CsvDifferenceHandler implements MissingRecordHandler, RecordDiffere
 
     private void writeDifference(int partitionId, Key key, List<Integer> missingFromClusters, RecordMetadata[] metadatas, String ...differences) {
         StringBuilder sb = new StringBuilder();
-        sb.append(key.namespace).append(',')
-            .append(key.setName).append(',')
+        sb.append(csvify(key.namespace)).append(',')
+            .append(csvify(key.setName)).append(',')
             .append(partitionId).append(',')
-            .append(key.userKey).append(',');
+            .append(csvify(key.userKey == null ? null : key.userKey.toString())).append(',');
         
         if (numberOfClusters != 2) {
             sb.append(numberOfClusters).append(',');

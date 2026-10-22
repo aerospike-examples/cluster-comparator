@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+
+import com.aerospike.comparator.ClusterComparatorOptions.CustomActions;
 
 import org.junit.jupiter.api.Test;
 
@@ -140,6 +143,115 @@ public class ClusterComparatorOptionsTest {
                 "--file", "records.csv"
         }, true);
         assertFalse(options.validateAndCollectErrors().containsKey("inputFile"));
+    }
+
+    @Test
+    void customActions_resolveClusterNamesAfterClustersExist() throws Exception {
+        ClusterComparatorOptions options = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--clusterName1", "source",
+                "--clusterName2", "target",
+                "--namespaces", "test",
+                "--action", "custom",
+                "--customActions", "source:touch,target:none",
+                "--inputFile", "in.csv"
+        }, true);
+        assertFalse(options.validateAndCollectErrors().containsKey("customActions"));
+        assertEquals(CustomActions.TOUCH, options.getCustomActions().get(0));
+        assertEquals(CustomActions.NONE, options.getCustomActions().get(1));
+    }
+
+    @Test
+    void setMapping_requiresSetNames() throws Exception {
+        Path config = Files.createTempFile("set-mapping", ".yaml");
+        Files.writeString(config, "clusters:\n"
+                + "  - hostName: h1:3000\n"
+                + "    clusterName: source\n"
+                + "  - hostName: h2:3000\n"
+                + "    clusterName: target\n"
+                + "setMapping:\n"
+                + "  - set: users\n"
+                + "    mappings:\n"
+                + "      - clusterIndex: 2\n"
+                + "        name: accounts\n");
+        ClusterComparatorOptions options = new ClusterComparatorOptions(new String[] {
+                "--configFile", config.toString(),
+                "--namespaces", "test",
+                "--action", "scan",
+                "--sourceCluster", "source"
+        }, true);
+        Map<String, String> errors = options.validateAndCollectErrors();
+        assertTrue(errors.containsKey("setNames"));
+        assertFalse(errors.containsKey("sourceCluster"));
+    }
+
+    @Test
+    void webValidation_allowsPartitionListWhenTheRangeIsLeftAtTheDefaults() throws Exception {
+        ClusterComparatorOptions options = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--partitionList", "1,2",
+                "--startPartition", "0",
+                "--endPartition", "4096"
+        }, true);
+        assertFalse(options.validateAndCollectErrors().containsKey("partitionList"));
+    }
+
+    @Test
+    void webValidation_rejectsSourceClusterWithQuickCompareAndAnUnknownCluster() throws Exception {
+        ClusterComparatorOptions quick = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--compareMode", "QUICK_NAMESPACE",
+                "--sourceCluster", "1"
+        }, true);
+        assertTrue(quick.validateAndCollectErrors().containsKey("sourceCluster"));
+
+        ClusterComparatorOptions unknown = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--sourceCluster", "9"
+        }, true);
+        assertTrue(unknown.validateAndCollectErrors().containsKey("sourceCluster"));
+    }
+
+    @Test
+    void webValidation_requiresCustomActionsOnlyForCustomActions() throws Exception {
+        ClusterComparatorOptions missing = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--action", "scan_custom"
+        }, true);
+        assertTrue(missing.validateAndCollectErrors().containsKey("customActions"));
+
+        ClusterComparatorOptions forbidden = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--action", "scan",
+                "--customActions", "1:touch"
+        }, true);
+        assertTrue(forbidden.validateAndCollectErrors().containsKey("customActions"));
+    }
+
+    @Test
+    void webValidation_rejectsBatchSizeAndNonDefaultRangeWithPartitionList() throws Exception {
+        ClusterComparatorOptions options = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--lookupBatchSize", "0",
+                "--partitionList", "1,2",
+                "--endPartition", "100"
+        }, true);
+        Map<String, String> errors = options.validateAndCollectErrors();
+        assertTrue(errors.containsKey("lookupBatchSize"));
+        assertTrue(errors.containsKey("partitionList"));
     }
 
     private static ClusterComparatorOptions rerunOptions(String input, String output) throws Exception {

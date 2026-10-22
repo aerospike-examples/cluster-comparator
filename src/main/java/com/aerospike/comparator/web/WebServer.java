@@ -1,7 +1,7 @@
 package com.aerospike.comparator.web;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -24,10 +24,15 @@ import com.aerospike.client.policy.ClientPolicy;
 import com.aerospike.client.policy.AuthMode;
 import com.aerospike.client.policy.WritePolicy;
 import com.aerospike.comparator.ClusterComparatorOptions;
+import com.aerospike.comparator.ClusterConfig;
+import com.aerospike.comparator.ConfigOptions;
 import com.aerospike.comparator.dbaccess.AerospikeClientAccess;
 import com.aerospike.comparator.dbaccess.LocalAerospikeClient;
 import com.aerospike.comparator.dbaccess.RemoteAerospikeClient;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 
 import io.javalin.Javalin;
 import io.javalin.http.staticfiles.Location;
@@ -540,32 +545,7 @@ public class WebServer {
             List<Map<String, Object>> clusters = (List<Map<String, Object>>) clustersObj;
             if (!clusters.isEmpty()) {
                 try {
-                    File tempFile = File.createTempFile("cc-config-", ".yaml");
-                    tempFile.deleteOnExit();
-                    StringBuilder yaml = new StringBuilder();
-                    yaml.append("clusters:\n");
-                    for (Map<String, Object> c : clusters) {
-                        yaml.append("  - hostName: \"").append(nullSafe(c.get("hostName"))).append("\"\n");
-                        if (c.get("clusterName") != null && !c.get("clusterName").toString().isEmpty()) {
-                            yaml.append("    clusterName: \"").append(c.get("clusterName")).append("\"\n");
-                        }
-                        if (c.get("userName") != null && !c.get("userName").toString().isEmpty()) {
-                            yaml.append("    userName: \"").append(c.get("userName")).append("\"\n");
-                        }
-                        if (c.get("password") != null && !c.get("password").toString().isEmpty()) {
-                            yaml.append("    password: \"").append(c.get("password")).append("\"\n");
-                        }
-                        if (c.get("authMode") != null && !c.get("authMode").toString().isEmpty()) {
-                            yaml.append("    authMode: ").append(c.get("authMode")).append("\n");
-                        }
-                        Object sa = c.get("useServicesAlternate");
-                        if (sa instanceof Boolean && (Boolean) sa) {
-                            yaml.append("    useServicesAlternate: true\n");
-                        }
-                    }
-                    try (FileWriter fw = new FileWriter(tempFile)) {
-                        fw.write(yaml.toString());
-                    }
+                    File tempFile = writeClusterConfig(clusters);
                     args.add("--configFile");
                     args.add(tempFile.getAbsolutePath());
                 } catch (Exception e) {
@@ -593,7 +573,56 @@ public class WebServer {
         return args;
     }
 
+    /**
+     * Write cluster settings with a YAML library so quotes, backslashes, and
+     * newlines in passwords are escaped. Hand-built quoted strings were not.
+     */
+    static File writeClusterConfig(List<Map<String, Object>> clusters) throws IOException {
+        List<ClusterConfig> configs = new ArrayList<>();
+        for (Map<String, Object> c : clusters) {
+            ClusterConfig config = new ClusterConfig();
+            config.setHostName(nullSafe(c.get("hostName")));
+            String clusterName = stringOrNull(c.get("clusterName"));
+            if (clusterName != null) {
+                config.setClusterName(clusterName);
+            }
+            String userName = stringOrNull(c.get("userName"));
+            if (userName != null) {
+                config.setUserName(userName);
+            }
+            String password = stringOrNull(c.get("password"));
+            if (password != null) {
+                config.setPassword(password);
+            }
+            String authMode = stringOrNull(c.get("authMode"));
+            if (authMode != null) {
+                config.setAuthMode(AuthMode.valueOf(authMode));
+            }
+            Object sa = c.get("useServicesAlternate");
+            if (sa instanceof Boolean && (Boolean) sa) {
+                config.setUseServicesAlternate(true);
+            }
+            configs.add(config);
+        }
+        ConfigOptions configOptions = new ConfigOptions();
+        configOptions.setClusters(configs);
+        File tempFile = File.createTempFile("cc-config-", ".yaml");
+        tempFile.deleteOnExit();
+        ObjectMapper yaml = YAMLMapper.builder().enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS).build();
+        yaml.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        yaml.writeValue(tempFile, configOptions);
+        return tempFile;
+    }
+
     private static String nullSafe(Object obj) {
         return obj == null ? "" : obj.toString();
+    }
+
+    private static String stringOrNull(Object obj) {
+        if (obj == null) {
+            return null;
+        }
+        String value = obj.toString();
+        return value.isEmpty() ? null : value;
     }
 }

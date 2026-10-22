@@ -242,7 +242,7 @@ The same mechanism works when both sides are **the same cluster** (two set names
 Set mapping is **source-driven** (scan one set, batch-lookup the other). It is not a parallel walk of both sets, so extras that exist only on the mapped set are not reported. `QUICK_NAMESPACE` cannot be used. See [How the Comparator Works](how-it-works.md#set-mapping-source-driven-scans).
 
 **Requirements:**
-- Set mapping requires `--sourceCluster` to identify which cluster to scan (the source side).
+- Set mapping requires `--setNames` (the source set to scan) and `--sourceCluster` (which cluster to scan).
 - Source records **must** have the user key stored (written with `sendKey = true`). Without the user key, a new digest cannot be computed for the mapped set name and those records will be skipped.
 - Set mapping uses the same cluster identification as namespace mapping (either `clusterName` or `clusterIndex`).
 

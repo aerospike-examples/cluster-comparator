@@ -117,6 +117,36 @@ which switches to `aerospike-client-jdk21` and compiles with `--release 21`, pro
 
 There's no JDK 8 build today: this project's own code is JDK 8-compatible, but Javalin (the web UI's embedded server) is itself compiled for Java 11+ — Javalin's Java-8-compatible line stops at its 4.x releases, several majors behind the version this project uses. Supporting JDK 8 would mean either downgrading Javalin (real API-compatibility risk) or shipping a CLI-only build without the web UI for that JDK; neither has been done yet.
 
+### Tests
+
+```bash
+./mvnw -DskipUi test
+```
+
+This runs the unit tests and the live-cluster tests. Live tests are tagged `integration`. Each one probes its clusters and skips when a cluster does not answer, so the command stays green with no cluster running.
+
+Live tests do not read `--hosts1` or `--hosts2`. Seeds are resolved by `ClusterTestHosts`:
+
+| Side | Environment variable | System property | Default |
+|------|----------------------|-----------------|---------|
+| 1 | `AEROSPIKE_TEST_CLUSTER_1` | `aerospike.test.cluster.1` | `localhost:3100` |
+| 2 | `AEROSPIKE_TEST_CLUSTER_2` | `aerospike.test.cluster.2` | `localhost:3101` |
+| 3 | `AEROSPIKE_TEST_CLUSTER_3` | `aerospike.test.cluster.3` | `localhost:3102` |
+
+Two-cluster tests use sides 2 and 3. Three-cluster tests use all three. They write into the `test` namespace, in a set named `compTest_` plus the test class, and truncate that set afterwards.
+
+Environment variables reach the forked test process. A Maven `-D` property does not, unless it is placed in Surefire's `argLine`. To run only the live tests:
+
+```bash
+AEROSPIKE_TEST_CLUSTER_2=seed-a:3000 \
+AEROSPIKE_TEST_CLUSTER_3=seed-b:3000 \
+./mvnw -DskipUi test -Dgroups=integration
+```
+
+The live tests cover `MISSING_RECORDS`, `RECORDS_DIFFERENT`, and `RECORD_DIFFERENCES` (including an ignored bin), the same checks with three clusters, touch from a result file, lists, blobs, path options, and a high thread count. `LiveGapScanTest` also covers quick compare, set mapping (including a source record with no stored user key), date-range verification, rerunning a `--showMetadata` file whose key contains a comma, `--partitionList`, a comparison through the remote server, and `SCAN_CUSTOM` delete and durable delete.
+
+Quick compare with namespace mapping still has no live test. That needs a second namespace on one of the clusters, and a namespace cannot be created through the client.
+
 ### Cutting a Release (Maintainers)
 
 1. Bump `<version>` in `pom.xml` to the release version. [`release.sh`](release.sh) does this for you:

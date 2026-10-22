@@ -32,7 +32,7 @@ public class CsvDifferenceHandlerTest {
         assertEquals(2, lines.size());
         assertEquals(handler.getFileHeader(), lines.get(0));
         assertTrue(lines.get(1).contains("production,,4091,,"));
-        assertTrue(lines.get(1).contains("Partition net object count mismatch"));
+        assertTrue(lines.get(1).contains("\"Partition net object count mismatch:"));
         assertTrue(lines.get(1).contains("PARTITION_COUNT"));
         assertTrue(lines.get(1).contains("1005"));
         assertTrue(lines.get(1).contains("1002"));

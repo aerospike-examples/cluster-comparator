@@ -120,6 +120,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     private boolean showMetadata = false;
     private List<Integer> partitionList = null;
     private Map<Integer, CustomActions> customActions;
+    private String customActionsArg;
     private boolean skipChallenge = false;
     private int webInterfacePort = -1;
     private String webPassword = null;
@@ -457,8 +458,8 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             }
         }
 
-        // Resolve --sourceCluster after cluster names exist (config file or --clusterNameN).
-        this.sourceCluster = parseSourceCluster(this.sourceClusterArg);
+        // Resolve names after cluster names exist (config file or --clusterNameN).
+        resolveNamedClusterReferences();
 
         if (!hasErrors && this.configOptions != null) {
             configError = this.configOptions.resolveNamespaceMappingClusterNamesAndValidate(this);
@@ -556,6 +557,9 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             else if (this.lookupBatchSize < 1) {
                 System.out.println("--lookupBatchSize must be >= 1, not " + this.lookupBatchSize);
             }
+            else if (this.hasSetMapping() && (this.setNames == null || this.setNames.length == 0)) {
+                System.out.println("Set mapping requires --setNames so the comparator knows which source set to scan");
+            }
             else if (this.hasSetMapping() && !this.hasSourceCluster()) {
                 System.out.println("Set mapping requires --sourceCluster to identify which cluster to scan");
             }
@@ -636,6 +640,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         if (this.clusters == null || this.clusters.size() < 2) {
             errors.put("clusters", "At least 2 clusters with valid host addresses must be specified");
         }
+        resolveNamedClusterReferences();
         if (!isValidThreadsValue()) {
             errors.put("threads", String.format(
                     "threads must be -1 (use all CPU cores), 0 (auto, capped at %d), or a positive number, not %d",
@@ -681,6 +686,34 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         }
         if (inputAndOutputAreSameFile()) {
             errors.put("inputFile", "Input file and output file are the same path. The output file is truncated when the run starts, which would erase the input.");
+        }
+        if (this.lookupBatchSize < 1) {
+            errors.put("lookupBatchSize", "--lookupBatchSize must be >= 1, not " + this.lookupBatchSize);
+        }
+        if ((this.action == Action.CUSTOM || this.action == Action.SCAN_CUSTOM) && this.customActions == null) {
+            errors.put("customActions", "Action " + this.action + " requires --customActions");
+        }
+        if (this.action != null && this.action != Action.CUSTOM && this.action != Action.SCAN_CUSTOM && this.customActions != null) {
+            errors.put("customActions", "Action " + this.action + " cannot take --customActions");
+        }
+        if ((this.action == Action.CUSTOM || this.action == Action.SCAN_CUSTOM) && this.customActions != null && !validateCustomClusterOrdinals()) {
+            errors.put("customActions", "Custom actions refer to a cluster that is not in the cluster list");
+        }
+        if (this.hasSetMapping() && (this.setNames == null || this.setNames.length == 0)) {
+            errors.put("setNames", "Set mapping requires --setNames so the comparator knows which source set to scan");
+        }
+        if (this.hasSetMapping() && !this.hasSourceCluster()) {
+            errors.put("sourceCluster", "Set mapping requires --sourceCluster to identify which cluster to scan");
+        }
+        if (this.hasSourceCluster() && !isClusterIdValid(this.sourceCluster)) {
+            errors.put("sourceCluster", String.format("Invalid --sourceCluster: %d. Must be in the range 1->%d",
+                    this.sourceCluster + 1, this.getNumberOfClusters()));
+        }
+        if (this.hasSourceCluster() && this.isQuickCompare()) {
+            errors.put("sourceCluster", "--sourceCluster cannot be used with QUICK_NAMESPACE compare mode");
+        }
+        if (this.partitionList != null && (this.startPartition != 0 || this.endPartition != 4096)) {
+            errors.put("partitionList", "startPartition and endPartition cannot be changed when partitionList is specified");
         }
         return errors;
     }
@@ -835,7 +868,7 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             }
         }
         
-        this.customActions = parseCustomActions(cl.getOptionValue("customActions"));
+        this.customActionsArg = cl.getOptionValue("customActions");
         this.skipChallenge = cl.hasOption("skipChallenge");
         this.webInterfacePort = Integer.parseInt(cl.getOptionValue("webInterfacePort", "-1"));
         this.webPassword = cl.getOptionValue("webPassword");
@@ -904,6 +937,15 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
 
     public boolean hasSourceCluster() {
         return sourceCluster >= 0;
+    }
+
+    /**
+     * Cluster names in --sourceCluster and --customActions can only be resolved
+     * after the cluster list exists. Both validation paths call this.
+     */
+    private void resolveNamedClusterReferences() {
+        this.sourceCluster = parseSourceCluster(this.sourceClusterArg);
+        this.customActions = parseCustomActions(this.customActionsArg);
     }
 
     private int parseSourceCluster(String param) {

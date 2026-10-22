@@ -90,6 +90,8 @@ public class ClusterComparator {
     private Policy readPolicyToUse;
     private WritePolicy writePolicyToUse;
     private boolean hasDoneFirstDelete = false;
+    private boolean deleteChallengeFailed = false;
+    private final Object deleteChallengeLock = new Object();
     private AtomicBoolean hasChallengeActive = new AtomicBoolean(false);
 
     private volatile long comparisonStartTime;
@@ -494,7 +496,9 @@ public class ClusterComparator {
         }
         for (int i = 0; i < clients.length; i++) {
             for (int j = i+1; j < clients.length; j++) {
-                partitionsDifferent.addAll(partitionMaps[i].compare(partitionMaps[j], namespace));
+                String leftNamespace = options.getNamespaceName(namespace, i);
+                String rightNamespace = options.getNamespaceName(namespace, j);
+                partitionsDifferent.addAll(partitionMaps[i].compare(partitionMaps[j], leftNamespace, rightNamespace));
             }
         }
         List<Integer> differences = new ArrayList<>(partitionsDifferent);
@@ -1108,12 +1112,14 @@ public class ClusterComparator {
                         try {
                             comparePartition(clients, namespace, setName, partitionId);
                         }
-                        catch (Exception e) {
+                        catch (Throwable e) {
                             // When a partition fails, it is unexpected as the retries
                             // have been set up to be very tolerant of timeouts, etc. 
                             // It would be possible to retry the partition by pushing it
                             // back onto the <code>partitionList</code> but then there is 
                             // a chance of infinite errors. Instead just flag it as an issue.
+                            // Errors (for example IllegalAccessError) are recorded the same
+                            // way, then the run is stopped so a fatal failure is not retried.
                             if (!options.isSilent()) {
                                 System.out.printf("ERROR: Worker thread encountered an error scanning partition %d which prevented it from completing "
                                         + "the scan of the partition. The error encountered was %s (%s)\n", 
@@ -1122,6 +1128,9 @@ public class ClusterComparator {
                             }
                             synchronized (failedPartitionsList) {
                                 failedPartitionsList.add(partitionId);
+                            }
+                            if (e instanceof Error) {
+                                forceTerminate = true;
                             }
                         }
                     }
@@ -1372,13 +1381,18 @@ public class ClusterComparator {
             }
             printSkippedMissingUserKeySummary();
             if (this.forceTerminate) {
-                if (this.totalMissingRecords.get() >= this.options.getMissingRecordsLimit()) {
+                long missingLimit = this.options.getMissingRecordsLimit();
+                long compareLimit = this.options.getRecordCompareLimit();
+                if (missingLimit > 0 && this.totalMissingRecords.get() >= missingLimit) {
                     System.out.printf("Comparison terminated after finding %d missing records on a limit of %d\n", 
-                            this.totalMissingRecords.get(), this.options.getMissingRecordsLimit());
+                            this.totalMissingRecords.get(), missingLimit);
                 }
-                else if (this.totalRecordsCompared.get() >= this.options.getRecordCompareLimit()) {
+                else if (compareLimit > 0 && this.totalRecordsCompared.get() >= compareLimit) {
                     System.out.printf("Comparison terminated after comparing %d records on a limit of %d\n", 
-                            this.totalRecordsCompared.get(), this.options.getRecordCompareLimit());
+                            this.totalRecordsCompared.get(), compareLimit);
+                }
+                else {
+                    System.out.println("Comparison stopped before completion.");
                 }
             }
             if (!this.failedPartitionsList.isEmpty()) {
@@ -1532,24 +1546,32 @@ public class ClusterComparator {
                 
             case DELETE:
             case DURABLE_DELETE:
-                if (!hasDoneFirstDelete && !options.isSkipChallenge()) {
-                    hasChallengeActive.set(true);
-                    String challenge = getChallengeString(6);
-                    System.out.printf("WARNING: Records will be deleted from one or more clusters! "
-                            + "If you are SURE you want to do this, type the following below: %s\n", challenge);
-                    input = new Scanner(System.in);
-                    String confirm = input.nextLine();
-                    if (!challenge.equals(confirm)) {
-                        hasChallengeActive.set(false);
-                        System.out.printf("Invalid response received. Expected '%s', received '%s'. Aborting run.\n", challenge, confirm);
-                        throw new IllegalStateException("Deletion validation challenge failed.");
+                synchronized (deleteChallengeLock) {
+                    if (deleteChallengeFailed) {
+                        return;
                     }
-                    hasDoneFirstDelete = true;
-                    hasChallengeActive.set(false);
+                    if (!hasDoneFirstDelete && !options.isSkipChallenge()) {
+                        hasChallengeActive.set(true);
+                        String challenge = getChallengeString(6);
+                        System.out.printf("WARNING: Records will be deleted from one or more clusters! "
+                                + "If you are SURE you want to do this, type the following below: %s\n", challenge);
+                        input = new Scanner(System.in);
+                        String confirm = input.nextLine();
+                        if (!challenge.equals(confirm)) {
+                            deleteChallengeFailed = true;
+                            hasChallengeActive.set(false);
+                            forceTerminate = true;
+                            System.out.printf("Invalid response received. Expected '%s', received '%s'. Aborting run.\n", challenge, confirm);
+                            throw new IllegalStateException("Deletion validation challenge failed.");
+                        }
+                        hasDoneFirstDelete = true;
+                        hasChallengeActive.set(false);
+                    }
                 }
 
-                writePolicyToUse.durableDelete = action == CustomActions.DURABLE_DELETE;
-                client.delete(writePolicyToUse, key);
+                WritePolicy deletePolicy = new WritePolicy(writePolicyToUse);
+                deletePolicy.durableDelete = action == CustomActions.DURABLE_DELETE;
+                client.delete(deletePolicy, key);
                 if (!options.isSilent()) {
                     System.out.printf("Deleting record %s on cluster %s\n", key, options.clusterIdToName(clusterOrdinal));
                 }
@@ -1670,7 +1692,7 @@ public class ClusterComparator {
             }
 
             while ((line = br.readLine()) != null) {
-                processor.process(clients, new FileLine(line, this.options));
+                processor.process(clients, new FileLine(line, this.options, this.options.isShowMetadata()));
             }
         } finally {
             br.close();
