@@ -82,21 +82,27 @@ public class RemoteRecordSet implements RecordSetAccess {
 
     @Override
     public void close() {
+        boolean clean = false;
         try {
             if (cachedRecordSet != null) {
-                cachedRecordSet.close();
+                clean = cachedRecordSet.close();
             }
             else {
                 connection.getDos().write(RemoteServer.CMD_RS_CLOSE);
                 connection.getDis().readInt();
+                clean = true;
             }
         }
         catch (IOException ioe) {
             throw new AerospikeException(ioe);
         }
         finally {
-            pool.release(connection);
-            
+            if (clean) {
+                pool.release(connection);
+            }
+            else {
+                pool.discard(connection);
+            }
         }
     }
 }

@@ -27,9 +27,6 @@ public class ClusterComparatorOptionsCliTest {
     private static final Pattern PARSED_OPTION_NAME = Pattern.compile(
             "cl\\.(?:getOptionValue|hasOption)\\(\"([^\"]+)\"");
 
-    /** Parsed in the constructor but deliberately not advertised on the CLI. */
-    private static final Set<String> INTENTIONALLY_UNREGISTERED = Set.of("masterCluster");
-
     private static final Set<String> OPTIONS_THAT_LOAD_FILES = Set.of("configFile", "pathOptionsFile");
 
     @Test
@@ -39,24 +36,12 @@ public class ClusterComparatorOptionsCliTest {
 
         List<String> missing = new ArrayList<>();
         for (String name : parsed) {
-            if (INTENTIONALLY_UNREGISTERED.contains(name)) {
-                continue;
-            }
             if (!registered.contains(name)) {
                 missing.add(name);
             }
         }
         assertTrue(missing.isEmpty(),
                 "These options are read from CommandLine but missing from formOptions(): " + missing);
-    }
-
-    @Test
-    void intentionallyUnregisteredOptionsAreNotOnTheCliCatalog() {
-        Set<String> registered = registeredLongNames();
-        for (String name : INTENTIONALLY_UNREGISTERED) {
-            assertFalse(registered.contains(name),
-                    name + " is marked as intentionally unregistered but is in formOptions()");
-        }
     }
 
     @Test

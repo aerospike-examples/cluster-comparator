@@ -24,7 +24,7 @@ Choose the right comparison mode for your use case:
 
 **Best for:** Fast health checks and bulk load validation  
 **Performance:** Fastest (seconds to minutes)  
-**Limitations:** Cannot use with sets, no record-level details
+**Limitations:** Cannot use with sets, no record-level details, and cannot run through a remote comparator (`remote:host:port`)
 
 ```bash
 java -jar cluster-comparator.jar \
@@ -66,6 +66,7 @@ Use `--partitionList` with `MISSING_RECORDS` or another scan mode to investigate
 - ❌ When you need to know which records differ
 - ❌ With specific sets (namespace-level only)
 - ❌ During migrations (data movement invalidates counts)
+- ❌ Through a remote comparator (`remote:host:port`). `partition-info` is larger than the remote protocol's 64KB message limit, so the call fails. Use `MISSING_RECORDS` for that side, or connect to the cluster directly.
 
 Cluster labels in output use 1-based ordinals (`1`, `2`, …) or `--clusterName1` / `--clusterName2` when configured. See [Cluster numbering](../reference.md#cluster-numbering) in the reference guide.
 

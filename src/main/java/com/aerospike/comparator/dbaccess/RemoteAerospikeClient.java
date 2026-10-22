@@ -56,6 +56,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDis().readInt();
         }
         catch (IOException ioe) {
+            // The socket is mid-command. Returning it to the pool would desynchronize the next caller.
+            this.pool.discard(conn);
+            conn = null;
             throw new AerospikeException(ioe);
         }
         finally {
@@ -74,6 +77,8 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDis().readInt();
         }
         catch (IOException ioe) {
+            this.pool.discard(conn);
+            conn = null;
             throw new AerospikeException(ioe);
         }
         finally {
@@ -99,6 +104,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDis().readInt();
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -120,6 +128,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             conn.getDis().readInt();
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -135,12 +146,15 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
         Connection conn = null;
         try {
             conn = this.pool.borrow();
-            conn.getDos().write(RemoteServer.CMD_TOUCH);
+            conn.getDos().write(RemoteServer.CMD_DELETE);
             RemoteUtils.sendPolicy(policy, conn.getDos());
             RemoteUtils.sendKey(key, conn.getDos());
             conn.getDis().readInt();
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -162,6 +176,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return conn.getDis().readBoolean();
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -183,6 +200,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return RemoteUtils.readRecord(conn.getDis());
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -212,6 +232,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return results;
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -241,6 +264,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return records;
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -269,7 +295,7 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
                 conn.getDos().write(bytes);
             }
             conn.getDos().writeUTF(statement.getNamespace());
-            conn.getDos().writeUTF(statement.getSetName());
+            RemoteUtils.writeNullableString(conn.getDos(), statement.getSetName());
             conn.getDos().writeInt(statement.getRecordsPerSecond());
             conn.getDos().writeInt(filter.getBegin());
             conn.getDos().writeInt(filter.getCount());
@@ -278,6 +304,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return new RemoteRecordSet(pool, conn, this.cacheSize, useHashes, compareMode);
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -300,6 +329,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return result;
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -320,6 +352,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return conn.getDis().readUTF();
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -344,6 +379,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return result;
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }
@@ -370,6 +408,9 @@ public class RemoteAerospikeClient implements AerospikeClientAccess {
             return RemoteUtils.readRecordMetadata(conn.getDis());
         }
         catch (IOException ioe) {
+            // Do not release: a failed read or write leaves unread or unwritten bytes on the socket.
+            this.pool.discard(conn);
+            conn = null;
             RemoteUtils.handleIOException(ioe);
             throw new AerospikeException(ioe);
         }

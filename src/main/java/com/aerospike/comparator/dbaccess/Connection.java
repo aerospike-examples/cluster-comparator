@@ -24,6 +24,7 @@ class Connection {
     public Connection(String host, int port, TlsPolicy tlsPolicy) throws IOException, CertificateParsingException {
         if (tlsPolicy == null) {
             this.socket = new Socket(host, port);
+            this.socket.setTcpNoDelay(true);
         }
 //        else if (tlsPolicy.context == null) {
 //            throw new AerospikeException("Remote connection has a TLS Policy specified but it has no SSL context on it.");
@@ -40,6 +41,7 @@ class Connection {
                 sslSocket.setEnabledCipherSuites(tlsPolicy.ciphers);
             }
             sslSocket.setUseClientMode(true);
+            sslSocket.setTcpNoDelay(true);
             sslSocket.connect(new InetSocketAddress(host, port));
             sslSocket.startHandshake();
             

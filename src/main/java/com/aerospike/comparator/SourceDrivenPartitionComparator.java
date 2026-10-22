@@ -113,6 +113,7 @@ class SourceDrivenPartitionComparator {
 
         Record[][] nonSourceRecords = new Record[parent.getNumberOfClusters()][];
         boolean[][] nonSourceExists = new boolean[parent.getNumberOfClusters()][];
+        boolean[] setMappedByCluster = new boolean[parent.getNumberOfClusters()];
 
         boolean anySetMapped = false;
         for (int clusterIdx : nonSourceIndices) {
@@ -137,6 +138,7 @@ class SourceDrivenPartitionComparator {
             String resolvedNamespace = options.getNamespaceName(namespace, clusterIdx);
             String resolvedSet = options.getSetName(setName, clusterIdx);
             boolean setMapped = !resolvedSet.equals(setName);
+            setMappedByCluster[clusterIdx] = setMapped;
 
             Key[] lookupKeys = new Key[batch.size()];
             boolean[] validKeys = new boolean[batch.size()];
@@ -182,6 +184,12 @@ class SourceDrivenPartitionComparator {
             List<Integer> clustersWithoutRecord = new ArrayList<>();
 
             for (int clusterIdx : nonSourceIndices) {
+                // Set mapping addresses the other set by user key. A source record with no stored
+                // user key cannot be looked up there; it was already counted as skipped, and reporting
+                // it as missing would describe a lookup that never happened.
+                if (setMappedByCluster[clusterIdx] && sr.key.userKey == null) {
+                    continue;
+                }
                 boolean exists;
                 if (recordLevelCompare) {
                     exists = nonSourceRecords[clusterIdx] != null && nonSourceRecords[clusterIdx][b] != null;

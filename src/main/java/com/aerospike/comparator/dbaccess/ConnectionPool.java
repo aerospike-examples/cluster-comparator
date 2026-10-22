@@ -58,6 +58,19 @@ class ConnectionPool {
             available.add(conn);
         }
     }
+
+    /**
+     * Drop a connection that can no longer be reused (a failed command, or a record set
+     * closed while a response was still in flight). It is closed and not returned to the pool.
+     */
+    public synchronized void discard(Connection conn) {
+        if (conn == null) {
+            return;
+        }
+        inUse.remove(conn);
+        available.remove(conn);
+        conn.close();
+    }
     
     public synchronized void close() {
         this.closed = true;

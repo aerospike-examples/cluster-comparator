@@ -1,6 +1,7 @@
 package com.aerospike.comparator;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
@@ -117,7 +118,6 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
     private ConfigOptions configOptions = null;
     private boolean binsOnly = false;
     private boolean showMetadata = false;
-    private int masterCluster = -1;
     private List<Integer> partitionList = null;
     private Map<Integer, CustomActions> customActions;
     private boolean skipChallenge = false;
@@ -466,9 +466,6 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
                 configError = this.configOptions.resolveSetMappingClusterNamesAndValidate(this);
             }
         }
-        if (this.masterCluster >= 0) {
-            this.showMetadata = true;
-        }
         if (this.isRemoteServer()) {
             if (this.clusters.size() != 1) {
                 System.out.printf("One cluster must be specified on the command line (host1 argument) or in the config file");
@@ -527,6 +524,10 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             }
             else if (this.action.needsInputFile && this.inputFileName == null) {
                 System.out.printf("Action %s requires an input file but none was provided.\n", this.action);
+            }
+            else if (inputAndOutputAreSameFile()) {
+                System.out.printf("Input file and output file are the same (%s). The output file is truncated when the run starts, which would erase the input.%n",
+                        this.inputFileName);
             }
             else if (this.pathOptions != null && !validatePathOptions()) {
                 System.out.println("Aborting scan due to invalid path options");
@@ -678,7 +679,29 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         if (this.action != null && this.action.needsInputFile && this.inputFileName == null) {
             errors.put("inputFile", "Action " + this.action + " requires an input file but none was provided");
         }
+        if (inputAndOutputAreSameFile()) {
+            errors.put("inputFile", "Input file and output file are the same path. The output file is truncated when the run starts, which would erase the input.");
+        }
         return errors;
+    }
+
+    /**
+     * Rerun reads the input file and, when an output file is set, truncates that file at startup.
+     * The same path would erase the input before it is read.
+     */
+    private boolean inputAndOutputAreSameFile() {
+        if (this.action == null || !this.action.needsInputFile() || !this.action.canUseOutputFile()) {
+            return false;
+        }
+        if (this.inputFileName == null || this.outputFileName == null) {
+            return false;
+        }
+        try {
+            return new File(this.inputFileName).getCanonicalFile().equals(new File(this.outputFileName).getCanonicalFile());
+        }
+        catch (IOException e) {
+            return new File(this.inputFileName).getAbsoluteFile().equals(new File(this.outputFileName).getAbsoluteFile());
+        }
     }
     
     private void loadConfig(String fileName) throws Exception {
@@ -812,7 +835,6 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             }
         }
         
-        this.masterCluster = Integer.parseInt(cl.getOptionValue("masterCluster", "-1"));
         this.customActions = parseCustomActions(cl.getOptionValue("customActions"));
         this.skipChallenge = cl.hasOption("skipChallenge");
         this.webInterfacePort = Integer.parseInt(cl.getOptionValue("webInterfacePort", "-1"));
@@ -1198,10 +1220,6 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
         return showMetadata;
     }
     
-    public int getMasterCluster() {
-        return masterCluster;
-    }
-    
     public List<Integer> getPartitionList() {
         return partitionList;
     }
@@ -1300,23 +1318,6 @@ public class ClusterComparatorOptions implements ClusterNameResolver, NamespaceN
             errors.add(e.getMessage());
         }
         return errors;
-    }
-    
-    public boolean isDateInRange(long timestamp) {
-        if (this.getBeginDate() == null && this.getEndDate() == null) {
-            // No date range specified
-            return true;
-        }
-        else if (this.getBeginDate() == null && this.getEndDate() != null ) {
-            return timestamp < this.getEndDate().getTime();
-        }
-        else if (this.getBeginDate() != null && this.getEndDate() == null) {
-            return timestamp >= this.getBeginDate().getTime();
-        }
-        else {
-            // Both times specified
-            return timestamp >= this.getBeginDate().getTime() && timestamp < this.getEndDate().getTime(); 
-        }
     }
 }
 

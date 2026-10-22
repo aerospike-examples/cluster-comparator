@@ -80,6 +80,8 @@ java -jar cluster-comparator.jar \
   --remoteCacheSize 1000
 ```
 
+`QUICK_NAMESPACE` is not supported for a `remote:` side. That mode downloads `partition-info`, which exceeds the remote protocol's 64KB message limit. Use a direct connection for a quick compare, or `MISSING_RECORDS` when the side is remote.
+
 ## ⚡ Remote Server Optimization
 
 ### Hash-Based Comparison

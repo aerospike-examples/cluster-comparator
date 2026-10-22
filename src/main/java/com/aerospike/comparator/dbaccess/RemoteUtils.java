@@ -34,9 +34,24 @@ import com.aerospike.comparator.AerospikeComparator;
 import gnu.crypto.hash.RipeMD160;
 
 public class RemoteUtils {
+    /**
+     * {@link DataOutputStream#writeUTF} rejects null. An empty string stands in for a
+     * null set name: Aerospike has no set whose name is empty, and a null set name means
+     * "no set" (a whole-namespace scan). Callers must read the value back with
+     * {@link #readNullableString} so the empty string becomes null again.
+     */
+    public static void writeNullableString(DataOutputStream dos, String value) throws IOException {
+        dos.writeUTF(value == null ? "" : value);
+    }
+
+    public static String readNullableString(DataInputStream dis) throws IOException {
+        String value = dis.readUTF();
+        return value.isEmpty() ? null : value;
+    }
+
     public static void sendKey(Key key, DataOutputStream dos) throws IOException {
         dos.writeUTF(key.namespace);
-        dos.writeUTF(key.setName);
+        writeNullableString(dos, key.setName);
         dos.writeInt(key.digest.length);
         dos.write(key.digest);
         if (key.userKey != null) {
@@ -68,7 +83,7 @@ public class RemoteUtils {
     
     public static Key readKey(DataInputStream dis) throws IOException {
         String namespace = dis.readUTF();
-        String setName = dis.readUTF();
+        String setName = readNullableString(dis);
         int length = dis.readInt();
         byte[] bytes = dis.readNBytes(length);
         int type = dis.readInt();

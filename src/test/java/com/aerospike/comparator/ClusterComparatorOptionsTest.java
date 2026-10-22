@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.Test;
 
 public class ClusterComparatorOptionsTest {
@@ -108,5 +111,45 @@ public class ClusterComparatorOptionsTest {
         skipped[base.length] = "-sdv";
         ClusterComparatorOptions shortFlag = new ClusterComparatorOptions(skipped);
         assertFalse(shortFlag.isDateRangeVerify());
+    }
+
+    @Test
+    void rerun_rejectsInputAndOutputThatAreTheSameFile() throws Exception {
+        Path dir = Files.createTempDirectory("cc-same-file");
+        Path file = dir.resolve("results.csv");
+        Path viaParent = dir.resolve("..").resolve(dir.getFileName().toString()).resolve("results.csv");
+
+        ClusterComparatorOptions options = rerunOptions(file.toString(), viaParent.toString());
+        assertTrue(options.validateAndCollectErrors().containsKey("inputFile"));
+    }
+
+    @Test
+    void rerun_allowsDistinctInputAndOutputFiles() throws Exception {
+        ClusterComparatorOptions options = rerunOptions("previous.csv", "next.csv");
+        assertFalse(options.validateAndCollectErrors().containsKey("inputFile"));
+    }
+
+    @Test
+    void touch_ignoresAnOutputFileEvenWhenItMatchesTheInput() throws Exception {
+        ClusterComparatorOptions options = new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--action", "touch",
+                "--inputFile", "records.csv",
+                "--file", "records.csv"
+        }, true);
+        assertFalse(options.validateAndCollectErrors().containsKey("inputFile"));
+    }
+
+    private static ClusterComparatorOptions rerunOptions(String input, String output) throws Exception {
+        return new ClusterComparatorOptions(new String[] {
+                "--hosts1", "h1:3000",
+                "--hosts2", "h2:3000",
+                "--namespaces", "test",
+                "--action", "rerun",
+                "--inputFile", input,
+                "--file", output
+        }, true);
     }
 }

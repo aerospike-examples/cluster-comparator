@@ -69,6 +69,12 @@ telnet remote-host 8080
 --remoteServerTls '{"context":{"certChain":"same-cert.pem",...}}'
 ```
 
+#### QUICK_NAMESPACE fails against a remote server
+
+`QUICK_NAMESPACE` asks every node for `partition-info`. One node's reply is a few hundred kilobytes. The remote protocol sends that text with a 64KB limit, so the remote server cannot return it and the comparison fails instead of printing partition counts.
+
+Use `MISSING_RECORDS` (or another scan mode) for any side addressed as `remote:host:port`. Quick compare still works when the controller connects to both clusters directly.
+
 #### Out of memory errors
 ```bash
 # Reduce concurrency and enable remote caching

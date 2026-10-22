@@ -247,6 +247,8 @@ Periodic console progress lines label per-cluster totals as **records scanned** 
 | `RECORD_DIFFERENCES` | 🐌 | High | High | Detailed debugging, field analysis |
 | `FIND_OVERLAP` | ⚡⚡ | Low | Medium | Data partitioning, merge preparation |
 
+`QUICK_NAMESPACE` cannot be used through a remote comparator (`remote:host:port`): `partition-info` is larger than the remote protocol's 64KB message limit. Use `MISSING_RECORDS` for that side. See [How the Comparator Works](how-it-works.md#quick-namespace-no-record-walk).
+
 ## 🌐 Network Architecture Reference
 
 ### Standard Mode

@@ -75,6 +75,7 @@ public class RemoteServer {
                     DataOutputStream dos = null;
                     try {
                         socket = serverSocket.accept();
+                        socket.setTcpNoDelay(true);
                         dis = new DataInputStream(socket.getInputStream());
                         dos = new DataOutputStream(socket.getOutputStream());
                         while (true) {
@@ -169,10 +170,11 @@ public class RemoteServer {
             Socket socket = null;
             try {
                 socket = socketServer.accept();
+                socket.setTcpNoDelay(true);
                 System.out.printf("New client connection established: %s\n", dumpSocketDetails(socket));
                 
                 SocketHandler handler = new SocketHandler(socket, client, this.debug);
-                Thread thread = new Thread(handler);
+                Thread thread = new Thread(handler, "remote-client");
                 thread.start();
             }
             catch (IOException ioe) {
@@ -217,7 +219,7 @@ public class RemoteServer {
             
             Statement stmt = new Statement();
             stmt.setNamespace(dis.readUTF());
-            stmt.setSetName(dis.readUTF());
+            stmt.setSetName(RemoteUtils.readNullableString(dis));
             stmt.setRecordsPerSecond(dis.readInt());
             
             int begin = dis.readInt();
@@ -234,6 +236,11 @@ public class RemoteServer {
             try {
                 while (!done) {
                     int command = dis.read();
+                    if (command == -1) {
+                        // The client went away mid-query. Do not spin: read() keeps returning -1.
+                        done = true;
+                        break;
+                    }
                     switch (command) {
                     case CMD_RS_MULTI:
                     case CMD_RS_MULTI_KEY_ONLY:
@@ -331,6 +338,10 @@ public class RemoteServer {
                         }
                         done = true;
                         dos.writeInt(0);
+                        break;
+
+                    default:
+                        throw new IOException("Unknown record-set command " + command);
                     }
                 }
             }
@@ -517,7 +528,11 @@ public class RemoteServer {
                     case CMD_PUT:
                         doPut();
                         break;
-						
+
+                    default:
+                        System.err.printf("Unknown command %d, closing connection\n", command);
+                        done = true;
+                        break;
                     }
                 }
                 catch (IOException ioe) {

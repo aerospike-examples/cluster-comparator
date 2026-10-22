@@ -44,7 +44,7 @@ That merge is why two sides with the same records finish in step even when node 
 
 `RECORDS_DIFFERENT` and `RECORD_DIFFERENCES` cost more because every scanned record’s bins travel to the comparator. `MISSING_RECORDS` and `FIND_OVERLAP` stay cheap: they only need identity.
 
-If `--showMetadata` is on (or `--masterCluster` is set), **difference rows** trigger an extra metadata read (last update time, size, generation, TTL). Matched records are not re-read for metadata.
+If `--showMetadata` is on, **difference rows** trigger an extra metadata read (last update time, size, generation, TTL). Matched records are not re-read for metadata.
 
 ## Quick namespace (no record walk)
 
@@ -56,6 +56,7 @@ Consequences:
 
 - Fast, low load, no set list, no date filter.
 - Cannot be used with `--sourceCluster` / set mapping.
+- Cannot be used when a side is a remote comparator (`remote:host:port`). Quick compare reads each node's `partition-info`, and that reply is larger than the 64KB limit of the remote protocol, so the call fails. Connect to that cluster directly, or use `MISSING_RECORDS` for the remote side.
 - A follow-up scan with `--partitionList` is the usual way to inspect the partitions it flags.
 
 ## Date filters and batch verification
@@ -93,7 +94,7 @@ This is **one-directional**. Records that exist only on the destination set are 
 
 Comparing two sets on the **same** cluster uses this path: configure the cluster twice, then map the second side to the other set by `clusterIndex`. See [Same-cluster set comparison](use-cases.md#10-same-cluster-set-comparison).
 
-Records written without a stored user key are skipped. Progress lines and the scan summary report `skipped (no user key)` so a run over keyless data is not mistaken for “no differences”. The per-record warning still requires `--verbose`.
+Records written without a stored user key are skipped, and they are not reported as missing: the mapped set was never looked up. Progress lines and the scan summary report `skipped (no user key)` so a run over keyless data is not mistaken for “no differences”. The per-record warning still requires `--verbose`.
 
 ## Namespace mapping
 
@@ -113,7 +114,7 @@ Progress lines for a **single** namespace (no set list) stay in the classic form
 
 ## Remote sides
 
-If one side is reached through a **remote comparator** (`remote:host:port`), the controller still drives the same modes. Record-level compares can send **hashes** instead of full bins across that link, and only fetch full records when hashes disagree. The logical result is the same; only the network path changes. See [Architecture](architecture.md).
+If one side is reached through a **remote comparator** (`remote:host:port`), the controller still drives the same scan modes. Record-level compares can send **hashes** instead of full bins across that link, and only fetch full records when hashes disagree. The logical result is the same; only the network path changes. `QUICK_NAMESPACE` is the exception: it is not available on a remote side. See [Quick namespace](#quick-namespace-no-record-walk) and [Architecture](architecture.md).
 
 ## Putting it together
 

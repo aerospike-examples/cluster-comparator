@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
@@ -555,58 +554,9 @@ public class ClusterComparator {
         }
     }
 
-    private boolean isLutValid(RecordMetadata[] recordMetadatas, int clusterId) {
-        return options.isDateInRange(recordMetadatas[clusterId].getLastUpdateMs());
-    }
-    
-    private boolean filterMissingRecordsByMasterId(RecordMetadata[] recordMetadatas, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, Key keyMissing) {
-        if (options.getMasterCluster() >= 0 && recordMetadatas != null) {
-            if (clustersWithoutRecord.contains(options.getMasterCluster())) {
-                // The master cluster has this record, check to see if the LUT is in the specified range.
-                if (isLutValid(recordMetadatas, options.getMasterCluster())) {
-                    // If the other records are out of range then ignore them.
-                    for (Iterator<Integer> it = clustersWithoutRecord.iterator(); it.hasNext();) {
-                        int clusterId = it.next();
-                        if (!isLutValid(recordMetadatas, clusterId)) {
-                            if (options.isDebug()) {
-                                System.out.printf("Master cluster %s has record %s and is valid, cluster %s also has the record but the LUT (%s) is outside the range\n",
-                                        options.clusterIdToName(options.getMasterCluster()),
-                                        keyMissing,
-                                        options.clusterIdToName(clusterId),
-                                        options.getDateFormat().format(new Date(recordMetadatas[clusterId].getLastUpdateMs())));
-                            }
-                            it.remove();
-                        }
-                    }
-                }
-                else {
-                    // The master record exists but is outside of the range, just ignore.
-                    return false;
-                }
-            }
-            else {
-                //The master is missing. Only flag this as an issue if any other cluster has the record and is valid
-                boolean hasValid = false;
-                for (int clusterId : clustersWithRecord) {
-                    if (isLutValid(recordMetadatas, clusterId)) {
-                        hasValid = true;
-                        break;
-                    }
-                }
-                if (!hasValid) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-    
     void missingRecord(AerospikeClientAccess[] clients, List<Integer> clustersWithRecord, List<Integer> clustersWithoutRecord, 
             boolean hasRecordLevelDifferences, int partitionId, Key keyMissing) {
         RecordMetadata[] recordMetadatas = getMetadata(clients, keyMissing, clustersWithoutRecord, null);
-        if (!filterMissingRecordsByMasterId(recordMetadatas, clustersWithRecord, clustersWithoutRecord, keyMissing)) {
-            return;
-        }
         for (MissingRecordHandler thisHandler : missingRecordHandlers) {
             try {
                 if (options.getCompareMode() == CompareMode.FIND_OVERLAP) {
@@ -1113,10 +1063,7 @@ public class ClusterComparator {
         
         if (compareResult.hasDifferences()) {
             RecordMetadata[] recordMetadatas = getMetadata(clients, getFirstNonNull(keys), null, clustersToCompare);
-            // TODO: Master cluster logic
-//            if (compareResult.filterByLastUpdateTimes(options, recordMetadatas)) {
-                differentRecords(partitionId, getFirstNonNull(keys), compareResult, invertClusterList(clustersToCompare), recordMetadatas);
-//            }
+            differentRecords(partitionId, getFirstNonNull(keys), compareResult, invertClusterList(clustersToCompare), recordMetadatas);
         }
         if (countTowardTotalCompared) {
             long totalRecsCompared = totalRecordsCompared.incrementAndGet();
@@ -1188,7 +1135,7 @@ public class ClusterComparator {
     
     RecordMetadata[] getMetadata(AerospikeClientAccess[] clients, Key key, List<Integer> clustersToSkip, List<Integer> clustersToInclude) {
         RecordMetadata[] recordMetadatas = null;
-        if (options.isShowMetadata() || options.getMasterCluster() >= 0) {
+        if (options.isShowMetadata()) {
             recordMetadatas = new RecordMetadata[numberOfClusters];
             for (int i = 0; i < numberOfClusters; i++) {
                 if ((clustersToSkip != null && clustersToSkip.contains(i)) || (clustersToInclude != null && !clustersToInclude.contains(i))) {
@@ -1277,10 +1224,7 @@ public class ClusterComparator {
                         
                         if (differenceCollection.hasDifferences()) {
                             RecordMetadata[] recordMetadatas = getMetadata(clients, key, clustersWithoutRecord, null);
-                            // TODO: Master cluster logic
-//                            if (differenceCollection.filterByLastUpdateTimes(options, recordMetadatas)) {
-                                differentRecords(partId, key, differenceCollection, clustersWithoutRecord, recordMetadatas);
-//                            }
+                            differentRecords(partId, key, differenceCollection, clustersWithoutRecord, recordMetadatas);
                         }
                         if (!clustersWithoutRecord.isEmpty()) {
                             missingRecord(clients, clustersWithRecord, clustersWithoutRecord, 
@@ -1390,7 +1334,7 @@ public class ClusterComparator {
             beginComparison(clients, null, null);
         }
         else {
-            for (int nsIdx = 0; nsIdx < namespaces.length; nsIdx++) {
+            for (int nsIdx = 0; nsIdx < namespaces.length && !forceTerminate; nsIdx++) {
                 String namespace = namespaces[nsIdx];
                 this.currentNamespaceIndex = nsIdx + 1;
                 if (this.setCount == 0) {
@@ -1398,7 +1342,7 @@ public class ClusterComparator {
                     beginComparison(clients, namespace, null);
                 }
                 else {
-                    for (int setIdx = 0; setIdx < sets.length; setIdx++) {
+                    for (int setIdx = 0; setIdx < sets.length && !forceTerminate; setIdx++) {
                         this.currentSetIndex = setIdx + 1;
                         beginComparison(clients, namespace, sets[setIdx]);
                     }
@@ -1855,11 +1799,24 @@ public class ClusterComparator {
     }
     
     public ProgressSnapshot getProgressSnapshot() {
-        int partitionCount = endPartition - startPartition;
+        int partitionCount;
         int completeCount = 0;
-        for (int i = 0; i < partitionCount; i++) {
-            if (partitionsComplete[i].get()) {
-                completeCount++;
+        List<Integer> selectedPartitions = options.getPartitionList();
+        if (selectedPartitions != null) {
+            partitionCount = selectedPartitions.size();
+            for (int partitionId : selectedPartitions) {
+                int index = partitionId - startPartition;
+                if (index >= 0 && index < partitionsComplete.length && partitionsComplete[index].get()) {
+                    completeCount++;
+                }
+            }
+        }
+        else {
+            partitionCount = endPartition - startPartition;
+            for (int i = 0; i < partitionCount; i++) {
+                if (partitionsComplete[i].get()) {
+                    completeCount++;
+                }
             }
         }
         long[] processedPerCluster = new long[numberOfClusters];
